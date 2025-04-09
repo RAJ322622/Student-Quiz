@@ -5,14 +5,10 @@ import time
 import pandas as pd
 import os
 from datetime import datetime
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings, VideoTransformerBase
+from streamlit_webrtc import webrtc_streamer, WebRtcMode
 
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
-RECORDINGS_DIR = "recordings"
-
-if not os.path.exists(RECORDINGS_DIR):
-    os.makedirs(RECORDINGS_DIR)
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -37,9 +33,6 @@ def get_db_connection():
     conn.execute('''CREATE TABLE IF NOT EXISTS password_changes (
                         username TEXT PRIMARY KEY,
                         change_count INTEGER DEFAULT 0)''')
-    conn.execute('''CREATE TABLE IF NOT EXISTS quiz_attempts (
-                        username TEXT PRIMARY KEY,
-                        attempt_count INTEGER DEFAULT 0)''')
     return conn
 
 # Password hashing
@@ -109,65 +102,42 @@ elif choice == "Take Quiz":
         st.warning("Please login first!")
     else:
         username = st.session_state.username
-        conn = get_db_connection()
-        cur = conn.execute("SELECT attempt_count FROM quiz_attempts WHERE username = ?", (username,))
-        row = cur.fetchone()
+        score = 0
+        start_time = time.time()
+        answers = {}
 
-        if row and row[0] >= 2:
-            st.error("You have already taken the quiz 2 times.")
-        else:
-            score = 0
-            start_time = time.time()
-            answers = {}
+        # Activate camera at quiz start
+        st.session_state.camera_active = True
+        st.subheader("📷 Camera Monitoring Active During Quiz")
+        webrtc_streamer(
+            key="quiz_camera",
+            mode=WebRtcMode.SENDRECV,
+            media_stream_constraints={"video": True, "audio": False}
+        )
 
-            st.subheader("📷 Live Camera Monitoring Enabled")
-            st.info("Please ensure your webcam is turned ON. The quiz is being monitored.")
+        for idx, question in enumerate(QUESTIONS):
+            st.markdown(f"**Q{idx+1}:** {question['question']}")
+            ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
+            answers[question['question']] = ans
 
-            class VideoTransformer(VideoTransformerBase):
-                def transform(self, frame):
-                    return frame
-
+        if st.button("Submit Quiz"):
+            for q in QUESTIONS:
+                if answers.get(q["question"]) == q["answer"]:
+                    score += 1
+            time_taken = round(time.time() - start_time, 2)
+            df = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now()]],
+                              columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
             try:
-                webrtc_streamer(
-                    key="quiz_camera",
-                    mode=WebRtcMode.SENDONLY,
-                    client_settings=ClientSettings(
-                        media_stream_constraints={"video": True, "audio": False},
-                        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-                    ),
-                    video_transformer_factory=VideoTransformer,
-                    async_processing=True
-                )
-            except Exception as e:
-                st.warning("Webcam connection failed. Please check your browser permissions and network.")
+                old_df_prof = pd.read_csv(PROF_CSV_FILE)
+                df = pd.concat([old_df_prof, df], ignore_index=True)
+            except FileNotFoundError:
+                pass
+            df.to_csv(PROF_CSV_FILE, index=False)
+            df[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
+            st.success(f"Quiz submitted! Your score: {score}")
 
-            for idx, question in enumerate(QUESTIONS):
-                st.markdown(f"**Q{idx+1}:** {question['question']}")
-                ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
-                answers[question['question']] = ans
-
-            if st.button("Submit Quiz"):
-                for q in QUESTIONS:
-                    if answers.get(q["question"]) == q["answer"]:
-                        score += 1
-                time_taken = round(time.time() - start_time, 2)
-                df = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now()]],
-                                  columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
-                try:
-                    old_df_prof = pd.read_csv(PROF_CSV_FILE)
-                    df = pd.concat([old_df_prof, df], ignore_index=True)
-                except FileNotFoundError:
-                    pass
-                df.to_csv(PROF_CSV_FILE, index=False)
-                df[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
-                st.success(f"Quiz submitted! Your score: {score}")
-
-                if row:
-                    conn.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
-                else:
-                    conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, 1)")
-                conn.commit()
-                conn.close()
+            # Turn off camera after quiz
+            st.session_state.camera_active = False
 
 elif choice == "Change Password":
     if not st.session_state.logged_in:
@@ -191,7 +161,7 @@ elif choice == "Change Password":
                     if result:
                         conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?", (username,))
                     else:
-                        conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)")
+                        conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)", (username,))
                     conn.commit()
                     st.success("Password updated successfully.")
                 conn.close()
@@ -218,9 +188,5 @@ elif choice == "Professor Panel":
                     file_name="prof_quiz_results.csv",
                     mime="text/csv"
                 )
-
-        st.subheader("🎥 Student Webcam Recordings")
-        recordings = [f for f in os.listdir(RECORDINGS_DIR) if f.endswith(".webm")]
-        for vid in recordings:
-            st.markdown(f"**{vid}**")
-            st.video(os.path.join(RECORDINGS_DIR, vid))
+        else:
+            st.warning("No results available yet.")
