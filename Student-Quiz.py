@@ -5,7 +5,7 @@ import time
 import pandas as pd
 import os
 from datetime import datetime
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, WebRtcMode
 import av
 
 PROF_CSV_FILE = "prof_quiz_results.csv"
@@ -129,7 +129,13 @@ elif choice == "Take Quiz":
             st.subheader("📷 Please make sure your webcam is turned ON for monitoring")
             st.info("Your webcam should be on, and the quiz is being monitored.")
 
-            webrtc_ctx = webrtc_streamer(key="quiz", video_transformer_factory=VideoTransformer)
+            webrtc_ctx = webrtc_streamer(
+                key="quiz",
+                mode=WebRtcMode.SENDONLY,
+                video_transformer_factory=VideoTransformer,
+                media_stream_constraints={"video": True, "audio": False},
+                async_processing=True,
+            )
 
             for idx, question in enumerate(QUESTIONS):
                 st.markdown(f"**Q{idx+1}:** {question['question']}")
@@ -155,7 +161,7 @@ elif choice == "Take Quiz":
                 if row:
                     conn.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
                 else:
-                    conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, 1)", (username,))
+                    conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, 1)")
                 conn.commit()
                 conn.close()
 
