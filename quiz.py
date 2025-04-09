@@ -35,7 +35,7 @@ def get_db_connection():
                         change_count INTEGER DEFAULT 0)''')
     conn.execute('''CREATE TABLE IF NOT EXISTS quiz_attempts (
                         username TEXT PRIMARY KEY,
-                        attempted INTEGER DEFAULT 0)''')
+                        attempt_count INTEGER DEFAULT 0)''')
     return conn
 
 # Password hashing
@@ -77,7 +77,7 @@ QUESTIONS = [
 ]
 
 # UI Starts
-st.title("🎓 Secure Quiz App with Webcam 🎥")
+st.title("🎓 Secure Quiz App with Webcam 📵")
 
 menu = ["Register", "Login", "Take Quiz", "Change Password", "Professor Panel"]
 choice = st.sidebar.selectbox("Menu", menu)
@@ -106,14 +106,12 @@ elif choice == "Take Quiz":
     else:
         username = st.session_state.username
         conn = get_db_connection()
-
-        # Fetch attempt count
         cur = conn.execute("SELECT attempt_count FROM quiz_attempts WHERE username = ?", (username,))
         result = cur.fetchone()
-        attempts = result[0] if result else 0
+        attempt_count = result[0] if result else 0
 
-        if attempts >= 2:
-            st.error("You have already taken the quiz twice. No more attempts allowed.")
+        if attempt_count >= 2:
+            st.warning("You have already attempted the quiz 2 times.")
         else:
             score = 0
             start_time = time.time()
@@ -137,11 +135,9 @@ elif choice == "Take Quiz":
                 for q in QUESTIONS:
                     if answers.get(q["question"]) == q["answer"]:
                         score += 1
-
                 time_taken = round(time.time() - start_time, 2)
                 df = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now()]],
                                   columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
-
                 try:
                     old_df_prof = pd.read_csv(PROF_CSV_FILE)
                     df = pd.concat([old_df_prof, df], ignore_index=True)
@@ -149,17 +145,14 @@ elif choice == "Take Quiz":
                     pass
                 df.to_csv(PROF_CSV_FILE, index=False)
                 df[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
+                st.success(f"Quiz submitted! Your score: {score}")
 
-                # Update attempt count
                 if result:
                     conn.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
                 else:
                     conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, 1)", (username,))
                 conn.commit()
-
-                st.success(f"Quiz submitted! Your score: {score}")
                 st.session_state.camera_active = False
-
         conn.close()
 
 elif choice == "Change Password":
@@ -206,7 +199,7 @@ elif choice == "Professor Panel":
         if os.path.exists(PROF_CSV_FILE):
             with open(PROF_CSV_FILE, "rb") as file:
                 st.download_button(
-                    label="📥 Download Results CSV",
+                    label="📅 Download Results CSV",
                     data=file,
                     file_name="prof_quiz_results.csv",
                     mime="text/csv"
