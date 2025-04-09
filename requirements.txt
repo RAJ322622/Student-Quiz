@@ -1,1 +1,14 @@
+sqlite3
+hashlib
+time
+pandas
+os
 cv2
+numpy 
+moviepy.editor 
+gTTS
+webrtc_streamer
+WebRtcMode
+VideoProcessorBase
+av
+datetime
