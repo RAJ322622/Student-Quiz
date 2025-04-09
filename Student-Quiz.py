@@ -169,8 +169,12 @@ elif choice == "Take Quiz":
             df.to_csv(PROF_CSV_FILE, index=False)
             df[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
             st.success(f"Quiz submitted! Your score: {score}")
+
+            # Deactivate monitoring
+            if st.session_state.camera_active:
+                st.session_state.camera_active = False
             remove_active_student(username)
-            st.session_state.camera_active = False
+            st.experimental_rerun()
 
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
