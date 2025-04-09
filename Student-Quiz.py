@@ -219,7 +219,8 @@ elif choice == "Take Quiz":
                         remove_active_student(username)
                         st.session_state.camera_active = False
                         st.session_state.quiz_submitted = True
-                        del st.session_state.quiz_start_time
+                        if "quiz_start_time" in st.session_state:
+                            del st.session_state.quiz_start_time
             conn.close()
 
 elif choice == "Professor Panel":
