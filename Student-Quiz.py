@@ -151,7 +151,20 @@ elif choice == "Take Quiz":
                 st.error("You have already taken the quiz 2 times. No more attempts allowed.")
             else:
                 score = 0
-                start_time = time.time()
+                if "quiz_start_time" not in st.session_state:
+                    st.session_state.quiz_start_time = time.time()
+
+                time_elapsed = int(time.time() - st.session_state.quiz_start_time)
+                time_limit = 25 * 60  # 25 minutes
+                time_left = time_limit - time_elapsed
+
+                if time_left <= 0:
+                    st.warning("⏰ Time is up! Auto-submitting your quiz.")
+                    st.session_state.auto_submit = True
+                else:
+                    mins, secs = divmod(time_left, 60)
+                    st.info(f"⏳ Time left: {mins:02d}:{secs:02d}")
+
                 answers = {}
 
                 if not st.session_state.quiz_submitted and not st.session_state.camera_active:
@@ -172,14 +185,17 @@ elif choice == "Take Quiz":
                     ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
                     answers[question['question']] = ans
 
-                if st.button("Submit Quiz") and not st.session_state.quiz_submitted:
+                submit_btn = st.button("Submit Quiz")
+                auto_submit_triggered = st.session_state.get("auto_submit", False)
+
+                if (submit_btn or auto_submit_triggered) and not st.session_state.quiz_submitted:
                     if None in answers.values():
                         st.error("Please answer all questions before submitting the quiz.")
                     else:
                         for q in QUESTIONS:
                             if answers.get(q["question"]) == q["answer"]:
                                 score += 1
-                        time_taken = round(time.time() - start_time, 2)
+                        time_taken = round(time.time() - st.session_state.quiz_start_time, 2)
 
                         new_row = pd.DataFrame([[username, hash_password(username), st.session_state.usn, st.session_state.section, score, time_taken, datetime.now()]],
                                                columns=["Username", "Hashed_Password", "USN", "Section", "Score", "Time_Taken", "Timestamp"])
@@ -209,7 +225,10 @@ elif choice == "Take Quiz":
                         remove_active_student(username)
                         st.session_state.camera_active = False
                         st.session_state.quiz_submitted = True
+                        st.session_state.auto_submit = False
+                        del st.session_state.quiz_start_time  # Clean up
             conn.close()
+
 
 elif choice == "Change Password":
     if not st.session_state.logged_in:
