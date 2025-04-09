@@ -129,21 +129,23 @@ elif choice == "Take Quiz":
             st.subheader("📷 Please make sure your webcam is turned ON for monitoring")
             st.info("Your webcam should be on, and the quiz is being monitored.")
 
-            webrtc_ctx = webrtc_streamer(
-                key="quiz",
-                mode=WebRtcMode.SENDONLY,
-                video_transformer_factory=VideoTransformer,
-                client_settings=ClientSettings(
-                    media_stream_constraints={"video": True, "audio": False},
-                    rtc_configuration={
-                        "iceServers": [
-                            {"urls": ["stun:stun1.l.google.com:19302"]},
-                            {"urls": ["stun:stun2.l.google.com:19302"]}
-                        ]
-                    }
-                ),
-                async_processing=True,
-            )
+            try:
+                webrtc_ctx = webrtc_streamer(
+                    key="quiz",
+                    mode=WebRtcMode.SENDONLY,
+                    video_transformer_factory=VideoTransformer,
+                    client_settings=ClientSettings(
+                        media_stream_constraints={"video": True, "audio": False},
+                        rtc_configuration={
+                            "iceServers": [
+                                {"urls": ["stun:stun.l.google.com:19302"]}
+                            ]
+                        }
+                    ),
+                    async_processing=True,
+                )
+            except Exception as e:
+                st.warning("Webcam connection failed. Please check your browser permissions and network.")
 
             for idx, question in enumerate(QUESTIONS):
                 st.markdown(f"**Q{idx+1}:** {question['question']}")
@@ -173,8 +175,11 @@ elif choice == "Take Quiz":
                 conn.commit()
                 conn.close()
 
-                if webrtc_ctx and webrtc_ctx.state.playing:
-                    webrtc_ctx.stop()
+                try:
+                    if 'webrtc_ctx' in locals() and webrtc_ctx and webrtc_ctx.state.playing:
+                        webrtc_ctx.stop()
+                except:
+                    pass
 
 elif choice == "Change Password":
     if not st.session_state.logged_in:
