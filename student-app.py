@@ -4,7 +4,7 @@ import hashlib
 import time
 import pandas as pd
 import os
-import cv2
+from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import moviepy.editor as mp
 from gtts import gTTS
@@ -13,7 +13,7 @@ import av
 from datetime import datetime
 
 # Ensure directories exist
-VIDEO_DIR = "/content/videos"
+VIDEO_DIR = "videos"
 RECORDING_DIR = "recordings"
 CSV_FILE = "quiz_results.csv"
 
@@ -26,7 +26,6 @@ if "logged_in" not in st.session_state:
 
 if "username" not in st.session_state:
     st.session_state["username"] = ""
-
 
 # Database connection
 def get_db_connection():
@@ -61,23 +60,12 @@ def authenticate_user(username, password):
     return user and user[0] == hash_password(password)
 
 # Quiz questions
-# Quiz questions
 QUESTIONS = [
-    {"question": "🔤 Which data type is used to store a single character in C? 🎯", "options": ["char", "int", "float", "double"], "answer": "char"},
-    {"question": "🔢 What is the output of 5 / 2 in C if both operands are integers? ⚡", "options": ["2.5", "2", "3", "Error"], "answer": "2"},
-    {"question": "🔁 Which loop is used when the number of iterations is known? 🔄", "options": ["while", "do-while", "for", "if"], "answer": "for"},
-    {"question": "📌 What is the format specifier for printing an integer in C? 🖨️", "options": ["%c", "%d", "%f", "%s"], "answer": "%d"},
-    {"question": "🚀 Which operator is used for incrementing a variable by 1 in C? ➕", "options": ["+", "++", "--", "="], "answer": "++"},
-    {"question": "📂 Which header file is required for input and output operations in C? 🖥️", "options": ["stdlib.h", "stdio.h", "string.h", "math.h"], "answer": "stdio.h"},
-    {"question": "🔄 What is the default return type of a function in C if not specified? 📌", "options": ["void", "int", "float", "char"], "answer": "int"},
-    {"question": "🎭 What is the output of printf(\"%d\", sizeof(int)); on a 32-bit system? 📏", "options": ["2", "4", "8", "16"], "answer": "4"},
-    {"question": "💡 What is the correct syntax for defining a pointer in C? 🎯", "options": ["int ptr;", "int* ptr;", "pointer int ptr;", "ptr int;"], "answer": "int* ptr;"},
-    {"question": "🔠 Which function is used to copy strings in C? 📋", "options": ["strcpy", "strcat", "strcmp", "strlen"], "answer": "strcpy"},
-    {"question": "📦 What is the keyword used to dynamically allocate memory in C? 🏗️", "options": ["malloc", "new", "alloc", "create"], "answer": "malloc"},
-    {"question": "🛑 Which statement is used to terminate a loop in C? 🔚", "options": ["break", "continue", "stop", "exit"], "answer": "break"},
-    {"question": "🧮 What will be the value of x after x = 10 % 3; ? ⚙️", "options": ["1", "2", "3", "0"], "answer": "1"},
-    {"question": "⚙️ Which operator is used to access the value stored at a memory address in C? 🎯", "options": ["&", "*", "->", "."], "answer": "*"},
-    {"question": "🔍 What does the 'sizeof' operator return in C? 📏", "options": ["The size of a variable", "The value of a variable", "The address of a variable", "The type of a variable"], "answer": "The size of a variable"},
+    {"question": "Which data type is used to store a single character in C?", "options": ["char", "int", "float", "double"], "answer": "char"},
+    {"question": "What is the output of 5 / 2 in C if both operands are integers?", "options": ["2.5", "2", "3", "Error"], "answer": "2"},
+    {"question": "Which loop is used when the number of iterations is known?", "options": ["while", "do-while", "for", "if"], "answer": "for"},
+    {"question": "What is the format specifier for printing an integer in C?", "options": ["%c", "%d", "%f", "%s"], "answer": "%d"},
+    {"question": "Which operator is used for incrementing a variable by 1 in C?", "options": ["+", "++", "--", "="], "answer": "++"},
 ]
 
 # Generate audio for questions
@@ -86,50 +74,57 @@ def generate_audio(question_text, filename):
         tts = gTTS(text=question_text, lang='en')
         tts.save(filename)
 
-# Create video for questions
+# Create video from image frames and audio
 def create_video(question_text, filename, audio_file):
     video_path = os.path.join(VIDEO_DIR, filename)
     if os.path.exists(video_path):
         return video_path
 
     width, height = 640, 480
-    img = np.full((height, width, 3), (255, 223, 186), dtype=np.uint8)
-    font = cv2.FONT_HERSHEY_SIMPLEX
+    background_color = (255, 223, 186)
+    text_color = (0, 0, 0)
+    font_size = 24
+    duration = 5
+    fps = 10
+    total_frames = duration * fps
 
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(video_path, fourcc, 10, (width, height))
+    try:
+        font = ImageFont.truetype("arial.ttf", font_size)
+    except IOError:
+        font = ImageFont.load_default()
 
-    for _ in range(50):
-        img_copy = img.copy()
-        text_size = cv2.getTextSize(question_text, font, 1, 2)[0]
-        text_x = (width - text_size[0]) // 2
-        text_y = (height + text_size[1]) // 2
-        cv2.putText(img_copy, question_text, (text_x, text_y), font, 1, (0, 0, 255), 2, cv2.LINE_AA)
-        out.write(img_copy)
+    frames = []
+    for _ in range(total_frames):
+        img = Image.new("RGB", (width, height), color=background_color)
+        draw = ImageDraw.Draw(img)
+        text_width, text_height = draw.textsize(question_text, font=font)
+        text_x = (width - text_width) // 2
+        text_y = (height - text_height) // 2
+        draw.text((text_x, text_y), question_text, fill=text_color, font=font)
+        frames.append(np.array(img))
 
-    out.release()
-
-    video_clip = mp.VideoFileClip(video_path)
+    clip = mp.ImageSequenceClip(frames, fps=fps)
     audio_clip = mp.AudioFileClip(audio_file)
-    final_video = video_clip.set_audio(audio_clip)
-    final_video.write_videofile(video_path, codec='libx264', fps=10, audio_codec='aac')
+    final_clip = clip.set_audio(audio_clip).set_duration(audio_clip.duration)
+    final_clip.write_videofile(video_path, codec='libx264', audio_codec='aac')
 
     return video_path
 
-# Video Processor for Streamlit WebRTC
+# Video Processor for recording webcam
 class VideoProcessor(VideoProcessorBase):
     def __init__(self):
         self.recording = True
-        self.container = av.open(os.path.join(RECORDING_DIR, "quiz_recording.mp4"), mode="w")
+        self.container = av.open(os.path.join(RECORDING_DIR, "quiz_recording.mp4"), mode="w", format="mp4")
         self.stream = self.container.add_stream("h264")
 
     def recv(self, frame):
-        img = frame.to_ndarray(format="bgr24")
+        frame_bgr = frame.to_ndarray(format="bgr24")
+        video_frame = av.VideoFrame.from_ndarray(frame_bgr, format="bgr24")
         if self.recording:
-            packet = self.stream.encode(frame)
+            packet = self.stream.encode(video_frame)
             if packet:
                 self.container.mux(packet)
-        return av.VideoFrame.from_ndarray(img, format="bgr24")
+        return video_frame
 
     def close(self):
         self.container.close()
@@ -166,7 +161,6 @@ elif choice == "Take Quiz":
         start_time = time.time()
         answers = {}
 
-        # Start camera monitoring
         st.subheader("📷 Live Camera Monitoring Enabled")
         webrtc_streamer(
             key="camera",
@@ -178,7 +172,7 @@ elif choice == "Take Quiz":
         for idx, question in enumerate(QUESTIONS):
             question_text = question["question"]
             audio_file = os.path.join(VIDEO_DIR, f"question_{idx}.mp3")
-            video_file = os.path.join(VIDEO_DIR, f"question_{idx}.mp4")
+            video_file = os.path.join(VIDEO_DIR, f"{username}_question_{idx}.mp4")
 
             generate_audio(question_text, audio_file)
             video_file = create_video(question_text, video_file, audio_file)
@@ -196,9 +190,8 @@ elif choice == "Take Quiz":
             st.write(f"Your Score: {score}")
             st.write(f"Time Taken: {time_taken} seconds")
 
-            # Save results to CSV
-            df = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now()]], 
-                              columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
+            df = pd.DataFrame([[username, score, time_taken, datetime.now()]], 
+                              columns=["Username", "Score", "Time_Taken", "Timestamp"])
             try:
                 existing_df = pd.read_csv(CSV_FILE)
                 updated_df = pd.concat([existing_df, df], ignore_index=True)
