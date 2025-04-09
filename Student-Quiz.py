@@ -13,7 +13,7 @@ STUDENT_CSV_FILE = "student_quiz_results.csv"
 ACTIVE_FILE = "active_students.json"
 
 # Session state defaults
-for key in ["logged_in", "username", "camera_active", "prof_verified"]:
+for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_submitted"]:
     if key not in st.session_state:
         st.session_state[key] = False if key != "username" else ""
 
@@ -154,7 +154,7 @@ elif choice == "Take Quiz":
             ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
             answers[question['question']] = ans
 
-        if st.button("Submit Quiz"):
+        if st.button("Submit Quiz") and not st.session_state.quiz_submitted:
             for q in QUESTIONS:
                 if answers.get(q["question"]) == q["answer"]:
                     score += 1
@@ -170,10 +170,10 @@ elif choice == "Take Quiz":
             df[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
             st.success(f"Quiz submitted! Your score: {score}")
 
-            # Deactivate monitoring
             if st.session_state.camera_active:
                 st.session_state.camera_active = False
             remove_active_student(username)
+            st.session_state.quiz_submitted = True
             st.experimental_rerun()
 
 elif choice == "Professor Panel":
