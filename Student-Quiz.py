@@ -14,9 +14,9 @@ STUDENT_CSV_FILE = "student_quiz_results.csv"
 ACTIVE_FILE = "active_students.json"
 
 # Session state defaults
-for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_submitted"]:
+for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_submitted", "student_section"]:
     if key not in st.session_state:
-        st.session_state[key] = False if key != "username" else ""
+        st.session_state[key] = False if key != "username" and key != "student_section" else ""
 
 # Database connection
 def get_db_connection():
@@ -129,12 +129,13 @@ elif choice == "Take Quiz":
         st.warning("Please login first!")
     else:
         username = st.session_state.username
+        section = st.text_input("Enter your Section (e.g., A, B, C):")
+        if section:
+            st.session_state.student_section = section.upper()
 
-        usn = st.text_input("Enter your USN")
-        section = st.text_input("Enter your Section (e.g., A, B, C)").upper()
-
-        if usn and section:
-
+        if not st.session_state.student_section:
+            st.warning("Please enter your section before proceeding.")
+        else:
             conn = get_db_connection()
             cur = conn.cursor()
             cur.execute("SELECT attempt_count FROM quiz_attempts WHERE username = ?", (username,))
@@ -185,11 +186,9 @@ elif choice == "Take Quiz":
                                 score += 1
                         time_taken = round(time.time() - start_time, 2)
 
-                        timestamp = datetime.now()
-                        new_row = pd.DataFrame([[username, usn, section, hash_password(username), score, time_taken, timestamp]],
-                                               columns=["Username", "USN", "Section", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
+                        new_row = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now(), st.session_state.student_section]],
+                                               columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp", "Section"])
 
-                        # Save to prof CSV
                         try:
                             old_df_prof = pd.read_csv(PROF_CSV_FILE)
                             full_df = pd.concat([old_df_prof, new_row], ignore_index=True)
@@ -197,19 +196,18 @@ elif choice == "Take Quiz":
                             full_df = new_row
                         full_df.to_csv(PROF_CSV_FILE, index=False)
 
-                        # Save to student CSV
-                        new_row[["Username", "USN", "Section", "Score", "Time_Taken", "Timestamp"]].to_csv(
+                        new_row[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(
                             STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE)
                         )
 
                         # Save to section-specific file
-                        section_file = f"section_{section}_results.csv"
+                        section_file = f"section_{st.session_state.student_section}.csv"
                         try:
                             old_section_df = pd.read_csv(section_file)
-                            updated_section_df = pd.concat([old_section_df, new_row], ignore_index=True)
+                            section_df = pd.concat([old_section_df, new_row], ignore_index=True)
                         except FileNotFoundError:
-                            updated_section_df = new_row
-                        updated_section_df.to_csv(section_file, index=False)
+                            section_df = new_row
+                        section_df.to_csv(section_file, index=False)
 
                         st.success(f"Quiz submitted! Your score: {score}")
 
@@ -222,9 +220,7 @@ elif choice == "Take Quiz":
                         remove_active_student(username)
                         st.session_state.camera_active = False
                         st.session_state.quiz_submitted = True
-
             conn.close()
-
 
 elif choice == "Change Password":
     if not st.session_state.logged_in:
