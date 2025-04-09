@@ -1,0 +1,10 @@
+{
+  "student1@example.com": {
+    "password": "hashed_password_here",
+    "role": "student"
+  },
+  "professor@example.com": {
+    "password": "hashed_password_here",
+    "role": "professor"
+  }
+}
