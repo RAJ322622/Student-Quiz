@@ -3,3 +3,4 @@ streamlit-webrtc
 gtts
 pandas
 numpy
+streamlit-webrtc==0.45.1
