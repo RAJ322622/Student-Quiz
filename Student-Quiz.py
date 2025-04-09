@@ -5,7 +5,7 @@ import time
 import pandas as pd
 import os
 from datetime import datetime
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, WebRtcMode
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, WebRtcMode, ClientSettings
 import av
 
 PROF_CSV_FILE = "prof_quiz_results.csv"
@@ -133,7 +133,12 @@ elif choice == "Take Quiz":
                 key="quiz",
                 mode=WebRtcMode.SENDONLY,
                 video_transformer_factory=VideoTransformer,
-                media_stream_constraints={"video": True, "audio": False},
+                client_settings=ClientSettings(
+                    media_stream_constraints={"video": True, "audio": False},
+                    rtc_configuration={
+                        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+                    }
+                ),
                 async_processing=True,
             )
 
