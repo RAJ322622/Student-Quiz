@@ -106,14 +106,22 @@ elif choice == "Take Quiz":
         start_time = time.time()
         answers = {}
 
-        # Silently activate camera (no visible feed, just turns on)
+        # Silently activate and persist camera (camera light on, nearly invisible stream)
         st.session_state.camera_active = True
-        webrtc_streamer(
-            key="hidden_camera",
+        ctx = webrtc_streamer(
+            key="quiz_camera_hidden",
             mode=WebRtcMode.SENDRECV,
             media_stream_constraints={"video": True, "audio": False},
             video_html_attrs={
-                "style": {"width": "1px", "height": "1px", "position": "absolute", "top": "0", "left": "0", "opacity": "0"}
+                "style": {
+                    "width": "100px",         # Small but keeps session stable
+                    "height": "75px",
+                    "opacity": "0.1",         # Low visibility to avoid browser optimization
+                    "position": "absolute",
+                    "top": "0px",
+                    "left": "0px",
+                    "z-index": "-1"           # Pushed behind other elements
+                }
             }
         )
 
@@ -138,8 +146,9 @@ elif choice == "Take Quiz":
             df[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
             st.success(f"Quiz submitted! Your score: {score}")
 
-            # Turn off camera after quiz
+            # Optional: Turn off camera after quiz (you can comment this out to keep it running)
             st.session_state.camera_active = False
+
 
 
 elif choice == "Professor Panel":
