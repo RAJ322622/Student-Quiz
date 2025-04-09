@@ -5,8 +5,7 @@ import time
 import pandas as pd
 import os
 from datetime import datetime
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, VideoProcessorBase
-import av
+from streamlit_webrtc import webrtc_streamer, WebRtcMode
 
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
@@ -19,11 +18,6 @@ if "username" not in st.session_state:
 
 if "camera_active" not in st.session_state:
     st.session_state.camera_active = False
-
-# Webcam video processor
-class VideoProcessor(VideoProcessorBase):
-    def recv(self, frame):
-        return frame
 
 # Database connection
 def get_db_connection():
@@ -115,8 +109,7 @@ elif choice == "Take Quiz":
         webrtc_streamer(
             key="quiz_camera",
             mode=WebRtcMode.SENDRECV,
-            media_stream_constraints={"video": True, "audio": False},
-            video_processor_factory=VideoProcessor
+            media_stream_constraints={"video": True, "audio": False}
         )
 
         for idx, question in enumerate(QUESTIONS):
@@ -180,18 +173,11 @@ elif choice == "Download Results (Prof Only)":
         if role != "professor":
             st.error("Only professors can access this section.")
         else:
-            st.subheader("📷 Webcam Monitoring Active During Download")
-            webrtc_streamer(
-                key="prof_camera",
-                mode=WebRtcMode.SENDRECV,
-                media_stream_constraints={"video": True, "audio": False},
-                video_processor_factory=VideoProcessor
-            )
-
+            st.subheader("📋 Download Quiz Results")
             if os.path.exists(PROF_CSV_FILE):
                 with open(PROF_CSV_FILE, "rb") as file:
                     st.download_button(
-                        label="📥 Download Results CSV (Professor)",
+                        label="📥 Download Results CSV (Professor Only)",
                         data=file,
                         file_name="prof_quiz_results.csv",
                         mime="text/csv"
