@@ -6,14 +6,13 @@ import pandas as pd
 import os
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
-from gtts import gTTS
+import pyttsx3
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, VideoProcessorBase
 import av
 from datetime import datetime
 import imageio
 from pydub import AudioSegment
 
-# Ensure directories exist
 VIDEO_DIR = "videos"
 RECORDING_DIR = "recordings"
 CSV_FILE = "quiz_results.csv"
@@ -26,7 +25,7 @@ if "logged_in" not in st.session_state:
 if "username" not in st.session_state:
     st.session_state["username"] = ""
 
-# DB functions
+# DB Setup
 def get_db_connection():
     conn = sqlite3.connect("quiz_app.db")
     conn.execute('''CREATE TABLE IF NOT EXISTS users (
@@ -55,19 +54,20 @@ def authenticate_user(username, password):
     conn.close()
     return user and user[0] == hash_password(password)
 
-# Questions
 QUESTIONS = [
     {"question": "🔤 Which data type is used to store a single character in C?", "options": ["char", "int", "float", "double"], "answer": "char"},
     {"question": "🔢 What is the output of 5 / 2 in C if both operands are integers?", "options": ["2.5", "2", "3", "Error"], "answer": "2"},
 ]
 
-# Audio generator
+# Text-to-Speech using pyttsx3
 def generate_audio(text, filename):
     if not os.path.exists(filename):
-        tts = gTTS(text=text, lang='en')
-        tts.save(filename)
+        engine = pyttsx3.init()
+        engine.setProperty("rate", 150)
+        engine.save_to_file(text, filename)
+        engine.runAndWait()
 
-# Video generator (no moviepy/cv2)
+# Video creator using imageio
 def create_video(question_text, filename, audio_file):
     video_path = os.path.join(VIDEO_DIR, filename)
     if os.path.exists(video_path):
@@ -97,20 +97,17 @@ def create_video(question_text, filename, audio_file):
     gif_path = video_path.replace(".mp4", ".gif")
     imageio.mimsave(gif_path, images, fps=fps)
 
-    # Combine with audio (convert GIF + MP3 to MP4)
-    audio = AudioSegment.from_mp3(audio_file)
+    audio = AudioSegment.from_file(audio_file)
     audio.export(video_path.replace(".mp4", ".wav"), format="wav")
 
     reader = imageio.get_reader(gif_path)
     writer = imageio.get_writer(video_path, fps=fps)
-
     for frame in reader:
         writer.append_data(frame)
     writer.close()
 
     return video_path
 
-# Webcam Recorder
 class VideoProcessor(VideoProcessorBase):
     def __init__(self):
         self.container = av.open(os.path.join(RECORDING_DIR, "quiz_recording.mp4"), mode="w")
@@ -129,7 +126,6 @@ class VideoProcessor(VideoProcessorBase):
     def __del__(self):
         self.container.close()
 
-# Streamlit UI
 st.title("🎥 Interactive Video Quiz 🎬")
 
 menu = ["Register", "Login", "Take Quiz", "View Recorded Video"]
@@ -171,7 +167,7 @@ elif choice == "Take Quiz":
 
         for idx, q in enumerate(QUESTIONS):
             question_text = q["question"]
-            audio_file = os.path.join(VIDEO_DIR, f"q{idx}.mp3")
+            audio_file = os.path.join(VIDEO_DIR, f"q{idx}.wav")
             video_file = f"q{idx}.mp4"
 
             generate_audio(question_text, audio_file)
