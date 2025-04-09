@@ -5,6 +5,7 @@ import time
 import pandas as pd
 import os
 import json
+import random
 from datetime import datetime
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, VideoTransformerBase
 from streamlit_autorefresh import st_autorefresh
@@ -152,7 +153,9 @@ elif choice == "Take Quiz":
             else:
                 score = 0
                 start_time = time.time()
+                quiz_duration = 60  # seconds
                 answers = {}
+                shuffled_questions = random.sample(QUESTIONS, len(QUESTIONS))
 
                 if not st.session_state.quiz_submitted and not st.session_state.camera_active:
                     add_active_student(username)
@@ -167,7 +170,13 @@ elif choice == "Take Quiz":
                         video_processor_factory=VideoProcessor,
                     )
 
-                for idx, question in enumerate(QUESTIONS):
+                remaining_time = quiz_duration - int(time.time() - start_time)
+                if remaining_time <= 0:
+                    st.error("Time is up! Please submit the quiz.")
+                else:
+                    st.info(f"⏳ Time remaining: {remaining_time} seconds")
+
+                for idx, question in enumerate(shuffled_questions):
                     st.markdown(f"**Q{idx+1}:** {question['question']}")
                     ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
                     answers[question['question']] = ans
@@ -176,7 +185,7 @@ elif choice == "Take Quiz":
                     if None in answers.values():
                         st.error("Please answer all questions before submitting the quiz.")
                     else:
-                        for q in QUESTIONS:
+                        for q in shuffled_questions:
                             if answers.get(q["question"]) == q["answer"]:
                                 score += 1
                         time_taken = round(time.time() - start_time, 2)
@@ -211,76 +220,10 @@ elif choice == "Take Quiz":
                         st.session_state.quiz_submitted = True
             conn.close()
 
-elif choice == "Change Password":
-    if not st.session_state.logged_in:
-        st.warning("Please login first!")
-    else:
-        username = st.session_state.username
-        old_pass = st.text_input("Old Password", type="password")
-        new_pass = st.text_input("New Password", type="password")
-        if st.button("Change Password"):
-            if not authenticate_user(username, old_pass):
-                st.error("Old password is incorrect!")
-            else:
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute("SELECT change_count FROM password_changes WHERE username = ?", (username,))
-                record = cursor.fetchone()
-                if record and record[0] >= 2:
-                    st.error("Password can only be changed twice.")
-                else:
-                    conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                                 (hash_password(new_pass), username))
-                    if record:
-                        conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?",
-                                     (username,))
-                    else:
-                        conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)",
-                                     (username,))
-                    conn.commit()
-                    st.success("Password updated successfully.")
-                conn.close()
-
 elif choice == "Professor Panel":
-    st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
-    if not st.session_state.prof_verified:
-        prof_user = st.text_input("Professor Username")
-        prof_pass = st.text_input("Professor Password", type="password")
-        if st.button("Verify Professor"):
-            if prof_user.strip().lower() == "raj kumar" and prof_pass.strip().lower() == "raj kumar":
-                st.session_state.prof_verified = True
-                st.success("Professor verified! You can now access results.")
-            else:
-                st.error("Access denied. Invalid professor credentials.")
-    else:
-        st.success("Welcome Professor Raj Kumar!")
-        if os.path.exists(PROF_CSV_FILE):
-            with open(PROF_CSV_FILE, "rb") as file:
-                st.download_button("\U0001F4E5 Download Results CSV", file, "prof_quiz_results.csv", mime="text/csv")
-        else:
-            st.warning("No results available yet.")
-
-elif choice == "Professor Monitoring Panel":
-    if not st.session_state.prof_verified:
-        st.warning("Professor access only. Please login via 'Professor Panel' to verify.")
-    else:
-        st_autorefresh(interval=10 * 1000, key="monitor_refresh")
-        st.header("\U0001F4E1 Live Student Monitoring")
-        st.info("Students currently taking the quiz will appear here.")
-        live_stream_ids = get_live_students()
-        if not live_stream_ids:
-            st.write("No active students currently taking the quiz.")
-        else:
-            for student_id in live_stream_ids:
-                st.subheader(f"Live Feed from: {student_id}")
-                st.warning("Note: Real-time video streaming from remote users is not supported on Streamlit Community Cloud.")
-                st.write(f"\U0001F464 {student_id} is currently taking the quiz.")
-
-elif choice == "View Recorded Video":
-    st.subheader("Recorded Quiz Videos")
-    video_files = [f for f in os.listdir(RECORDING_DIR) if f.endswith(".mp4")]
-    if video_files:
-        selected_video = st.selectbox("Select a recorded video:", video_files)
-        st.video(os.path.join(RECORDING_DIR, selected_video))
-    else:
-        st.warning("No recorded videos found.")
+    st.header("Professor Panel")
+    try:
+        prof_df = pd.read_csv(PROF_CSV_FILE)
+        st.dataframe(prof_df)
+    except FileNotFoundError:
+        st.warning("No quiz data available yet.")
