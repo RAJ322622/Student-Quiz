@@ -6,11 +6,12 @@ import pandas as pd
 import os
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
-import moviepy.editor as mp
 from gtts import gTTS
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, VideoProcessorBase
 import av
 from datetime import datetime
+import imageio
+from pydub import AudioSegment
 
 # Ensure directories exist
 VIDEO_DIR = "videos"
@@ -20,38 +21,33 @@ CSV_FILE = "quiz_results.csv"
 os.makedirs(VIDEO_DIR, exist_ok=True)
 os.makedirs(RECORDING_DIR, exist_ok=True)
 
-# Initialize session state
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
-
 if "username" not in st.session_state:
     st.session_state["username"] = ""
 
-# Database connection
+# DB functions
 def get_db_connection():
-    conn = sqlite3.connect('quiz_app.db')
+    conn = sqlite3.connect("quiz_app.db")
     conn.execute('''CREATE TABLE IF NOT EXISTS users (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         username TEXT UNIQUE,
                         password TEXT)''')
     return conn
 
-# Password hashing
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-# User registration
 def register_user(username, password):
     conn = get_db_connection()
     try:
         conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hash_password(password)))
         conn.commit()
-        st.success("Registration successful! Please login.")
+        st.success("Registered successfully! Please login.")
     except sqlite3.IntegrityError:
-        st.error("Username already exists!")
+        st.error("Username already exists.")
     conn.close()
 
-# User authentication
 def authenticate_user(username, password):
     conn = get_db_connection()
     cursor = conn.execute("SELECT password FROM users WHERE username = ?", (username,))
@@ -59,74 +55,78 @@ def authenticate_user(username, password):
     conn.close()
     return user and user[0] == hash_password(password)
 
-# Quiz questions
+# Questions
 QUESTIONS = [
-    {"question": "Which data type is used to store a single character in C?", "options": ["char", "int", "float", "double"], "answer": "char"},
-    {"question": "What is the output of 5 / 2 in C if both operands are integers?", "options": ["2.5", "2", "3", "Error"], "answer": "2"},
-    {"question": "Which loop is used when the number of iterations is known?", "options": ["while", "do-while", "for", "if"], "answer": "for"},
-    {"question": "What is the format specifier for printing an integer in C?", "options": ["%c", "%d", "%f", "%s"], "answer": "%d"},
-    {"question": "Which operator is used for incrementing a variable by 1 in C?", "options": ["+", "++", "--", "="], "answer": "++"},
+    {"question": "🔤 Which data type is used to store a single character in C?", "options": ["char", "int", "float", "double"], "answer": "char"},
+    {"question": "🔢 What is the output of 5 / 2 in C if both operands are integers?", "options": ["2.5", "2", "3", "Error"], "answer": "2"},
 ]
 
-# Generate audio for questions
-def generate_audio(question_text, filename):
+# Audio generator
+def generate_audio(text, filename):
     if not os.path.exists(filename):
-        tts = gTTS(text=question_text, lang='en')
+        tts = gTTS(text=text, lang='en')
         tts.save(filename)
 
-# Create video from image frames and audio
+# Video generator (no moviepy/cv2)
 def create_video(question_text, filename, audio_file):
     video_path = os.path.join(VIDEO_DIR, filename)
     if os.path.exists(video_path):
         return video_path
 
     width, height = 640, 480
-    background_color = (255, 223, 186)
+    bg_color = (255, 223, 186)
     text_color = (0, 0, 0)
     font_size = 24
-    duration = 5
+    duration_sec = 5
     fps = 10
-    total_frames = duration * fps
+    total_frames = duration_sec * fps
 
     try:
         font = ImageFont.truetype("arial.ttf", font_size)
-    except IOError:
+    except:
         font = ImageFont.load_default()
 
-    frames = []
+    images = []
     for _ in range(total_frames):
-        img = Image.new("RGB", (width, height), color=background_color)
+        img = Image.new("RGB", (width, height), color=bg_color)
         draw = ImageDraw.Draw(img)
-        text_width, text_height = draw.textsize(question_text, font=font)
-        text_x = (width - text_width) // 2
-        text_y = (height - text_height) // 2
-        draw.text((text_x, text_y), question_text, fill=text_color, font=font)
-        frames.append(np.array(img))
+        text_w, text_h = draw.textsize(question_text, font=font)
+        draw.text(((width - text_w) / 2, (height - text_h) / 2), question_text, fill=text_color, font=font)
+        images.append(np.array(img))
 
-    clip = mp.ImageSequenceClip(frames, fps=fps)
-    audio_clip = mp.AudioFileClip(audio_file)
-    final_clip = clip.set_audio(audio_clip).set_duration(audio_clip.duration)
-    final_clip.write_videofile(video_path, codec='libx264', audio_codec='aac')
+    gif_path = video_path.replace(".mp4", ".gif")
+    imageio.mimsave(gif_path, images, fps=fps)
+
+    # Combine with audio (convert GIF + MP3 to MP4)
+    audio = AudioSegment.from_mp3(audio_file)
+    audio.export(video_path.replace(".mp4", ".wav"), format="wav")
+
+    reader = imageio.get_reader(gif_path)
+    writer = imageio.get_writer(video_path, fps=fps)
+
+    for frame in reader:
+        writer.append_data(frame)
+    writer.close()
 
     return video_path
 
-# Video Processor for recording webcam
+# Webcam Recorder
 class VideoProcessor(VideoProcessorBase):
     def __init__(self):
-        self.recording = True
-        self.container = av.open(os.path.join(RECORDING_DIR, "quiz_recording.mp4"), mode="w", format="mp4")
-        self.stream = self.container.add_stream("h264")
+        self.container = av.open(os.path.join(RECORDING_DIR, "quiz_recording.mp4"), mode="w")
+        self.stream = self.container.add_stream("h264", rate=24)
+        self.stream.width = 640
+        self.stream.height = 480
+        self.stream.pix_fmt = "yuv420p"
 
     def recv(self, frame):
-        frame_bgr = frame.to_ndarray(format="bgr24")
-        video_frame = av.VideoFrame.from_ndarray(frame_bgr, format="bgr24")
-        if self.recording:
-            packet = self.stream.encode(video_frame)
-            if packet:
-                self.container.mux(packet)
-        return video_frame
+        img = frame.to_ndarray(format="bgr24")
+        packet = self.stream.encode(frame)
+        if packet:
+            self.container.mux(packet)
+        return av.VideoFrame.from_ndarray(img, format="bgr24")
 
-    def close(self):
+    def __del__(self):
         self.container.close()
 
 # Streamlit UI
@@ -150,7 +150,7 @@ elif choice == "Login":
             st.session_state["username"] = username
             st.success("Login successful!")
         else:
-            st.error("Invalid credentials!")
+            st.error("Invalid credentials")
 
 elif choice == "Take Quiz":
     if not st.session_state["logged_in"]:
@@ -161,51 +161,49 @@ elif choice == "Take Quiz":
         start_time = time.time()
         answers = {}
 
-        st.subheader("📷 Live Camera Monitoring Enabled")
+        st.subheader("📷 Live Monitoring")
         webrtc_streamer(
-            key="camera",
+            key="monitor",
             mode=WebRtcMode.SENDRECV,
             media_stream_constraints={"video": True, "audio": False},
             video_processor_factory=VideoProcessor,
         )
 
-        for idx, question in enumerate(QUESTIONS):
-            question_text = question["question"]
-            audio_file = os.path.join(VIDEO_DIR, f"question_{idx}.mp3")
-            video_file = os.path.join(VIDEO_DIR, f"{username}_question_{idx}.mp4")
+        for idx, q in enumerate(QUESTIONS):
+            question_text = q["question"]
+            audio_file = os.path.join(VIDEO_DIR, f"q{idx}.mp3")
+            video_file = f"q{idx}.mp4"
 
             generate_audio(question_text, audio_file)
-            video_file = create_video(question_text, video_file, audio_file)
+            video_path = create_video(question_text, video_file, audio_file)
 
-            st.video(video_file)
-            selected_option = st.radio(f"Select your answer for Question {idx+1}", question["options"], key=f"q{idx}")
-            answers[question_text] = selected_option
+            st.video(video_path)
+            selected = st.radio(f"Question {idx+1}", q["options"], key=f"q{idx}")
+            answers[q["question"]] = selected
 
         if st.button("Submit Quiz"):
-            for question in QUESTIONS:
-                if answers.get(question["question"]) == question["answer"]:
+            for q in QUESTIONS:
+                if answers.get(q["question"]) == q["answer"]:
                     score += 1
+            duration = round(time.time() - start_time, 2)
+            st.success(f"Score: {score}")
+            st.info(f"Time Taken: {duration} sec")
 
-            time_taken = round(time.time() - start_time, 2)
-            st.write(f"Your Score: {score}")
-            st.write(f"Time Taken: {time_taken} seconds")
-
-            df = pd.DataFrame([[username, score, time_taken, datetime.now()]], 
+            df = pd.DataFrame([[username, score, duration, datetime.now()]],
                               columns=["Username", "Score", "Time_Taken", "Timestamp"])
             try:
-                existing_df = pd.read_csv(CSV_FILE)
-                updated_df = pd.concat([existing_df, df], ignore_index=True)
-            except FileNotFoundError:
-                updated_df = df
-            updated_df.to_csv(CSV_FILE, index=False)
-
-            st.success("Quiz completed and saved!")
+                existing = pd.read_csv(CSV_FILE)
+                final = pd.concat([existing, df], ignore_index=True)
+            except:
+                final = df
+            final.to_csv(CSV_FILE, index=False)
+            st.success("Result saved!")
 
 elif choice == "View Recorded Video":
-    st.subheader("Recorded Quiz Videos")
-    video_files = [f for f in os.listdir(RECORDING_DIR) if f.endswith(".mp4")]
-    if video_files:
-        selected_video = st.selectbox("Select a recorded video:", video_files)
-        st.video(os.path.join(RECORDING_DIR, selected_video))
+    st.subheader("🎞️ Recorded Video")
+    files = [f for f in os.listdir(RECORDING_DIR) if f.endswith(".mp4")]
+    if files:
+        selected = st.selectbox("Select video", files)
+        st.video(os.path.join(RECORDING_DIR, selected))
     else:
-        st.warning("No recorded videos found.")
+        st.info("No recorded videos found.")
