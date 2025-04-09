@@ -116,15 +116,13 @@ elif choice == "Take Quiz":
             start_time = time.time()
             answers = {}
 
-            # Activate camera at quiz start
-            if not st.session_state.camera_active:
-                st.session_state.camera_active = True
-                st.subheader("📷 Webcam Monitoring (ON During Quiz Only)")
-                webrtc_streamer(
-                    key="quiz_camera",
-                    mode=WebRtcMode.SENDRECV,
-                    media_stream_constraints={"video": True, "audio": False}
-                )
+            # Always show webcam during quiz
+            st.subheader("📷 Webcam Monitoring (ON During Quiz Only)")
+            webrtc_streamer(
+                key="quiz_camera",
+                mode=WebRtcMode.SENDRECV,
+                media_stream_constraints={"video": True, "audio": False}
+            )
 
             for idx, question in enumerate(QUESTIONS):
                 st.markdown(f"**Q{idx+1}:** {question['question']}")
@@ -154,9 +152,6 @@ elif choice == "Take Quiz":
                     conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, 1)", (username,))
                 conn.commit()
                 conn.close()
-
-                # Turn off camera after quiz
-                st.session_state.camera_active = False
 
 elif choice == "Change Password":
     if not st.session_state.logged_in:
