@@ -33,6 +33,9 @@ def get_db_connection():
     conn.execute('''CREATE TABLE IF NOT EXISTS password_changes (
                         username TEXT PRIMARY KEY,
                         change_count INTEGER DEFAULT 0)''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS quiz_attempts (
+                        username TEXT PRIMARY KEY,
+                        attempted INTEGER DEFAULT 0)''')
     return conn
 
 # Password hashing
@@ -102,42 +105,62 @@ elif choice == "Take Quiz":
         st.warning("Please login first!")
     else:
         username = st.session_state.username
-        score = 0
-        start_time = time.time()
-        answers = {}
+        conn = get_db_connection()
 
-        # Activate camera at quiz start
-        st.session_state.camera_active = True
-        st.subheader("📷 Camera Monitoring Active During Quiz")
-        webrtc_streamer(
-            key="quiz_camera",
-            mode=WebRtcMode.SENDRECV,
-            media_stream_constraints={"video": True, "audio": False}
-        )
+        # Fetch attempt count
+        cur = conn.execute("SELECT attempt_count FROM quiz_attempts WHERE username = ?", (username,))
+        result = cur.fetchone()
+        attempts = result[0] if result else 0
 
-        for idx, question in enumerate(QUESTIONS):
-            st.markdown(f"**Q{idx+1}:** {question['question']}")
-            ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
-            answers[question['question']] = ans
+        if attempts >= 2:
+            st.error("You have already taken the quiz twice. No more attempts allowed.")
+        else:
+            score = 0
+            start_time = time.time()
+            answers = {}
 
-        if st.button("Submit Quiz"):
-            for q in QUESTIONS:
-                if answers.get(q["question"]) == q["answer"]:
-                    score += 1
-            time_taken = round(time.time() - start_time, 2)
-            df = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now()]],
-                              columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
-            try:
-                old_df_prof = pd.read_csv(PROF_CSV_FILE)
-                df = pd.concat([old_df_prof, df], ignore_index=True)
-            except FileNotFoundError:
-                pass
-            df.to_csv(PROF_CSV_FILE, index=False)
-            df[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
-            st.success(f"Quiz submitted! Your score: {score}")
+            # Activate camera at quiz start
+            st.session_state.camera_active = True
+            st.subheader("📷 Camera Monitoring Active During Quiz")
+            webrtc_streamer(
+                key="quiz_camera",
+                mode=WebRtcMode.SENDRECV,
+                media_stream_constraints={"video": True, "audio": False}
+            )
 
-            # Turn off camera after quiz
-            st.session_state.camera_active = False
+            for idx, question in enumerate(QUESTIONS):
+                st.markdown(f"**Q{idx+1}:** {question['question']}")
+                ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
+                answers[question['question']] = ans
+
+            if st.button("Submit Quiz"):
+                for q in QUESTIONS:
+                    if answers.get(q["question"]) == q["answer"]:
+                        score += 1
+
+                time_taken = round(time.time() - start_time, 2)
+                df = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now()]],
+                                  columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
+
+                try:
+                    old_df_prof = pd.read_csv(PROF_CSV_FILE)
+                    df = pd.concat([old_df_prof, df], ignore_index=True)
+                except FileNotFoundError:
+                    pass
+                df.to_csv(PROF_CSV_FILE, index=False)
+                df[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
+
+                # Update attempt count
+                if result:
+                    conn.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
+                else:
+                    conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, 1)", (username,))
+                conn.commit()
+
+                st.success(f"Quiz submitted! Your score: {score}")
+                st.session_state.camera_active = False
+
+        conn.close()
 
 elif choice == "Change Password":
     if not st.session_state.logged_in:
