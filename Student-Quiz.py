@@ -4,23 +4,18 @@ import hashlib
 import time
 import pandas as pd
 import os
+import json
 from datetime import datetime
 from streamlit_webrtc import webrtc_streamer, WebRtcMode
 
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
+ACTIVE_FILE = "active_students.json"
 
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-
-if "username" not in st.session_state:
-    st.session_state.username = ""
-
-if "camera_active" not in st.session_state:
-    st.session_state.camera_active = False
-
-if "prof_verified" not in st.session_state:
-    st.session_state.prof_verified = False
+# Session state defaults
+for key in ["logged_in", "username", "camera_active", "prof_verified"]:
+    if key not in st.session_state:
+        st.session_state[key] = False if key != "username" else ""
 
 # Database connection
 def get_db_connection():
@@ -67,16 +62,44 @@ def get_user_role(username):
     conn.close()
     return role[0] if role else "student"
 
+# Active student tracking
+def add_active_student(username):
+    try:
+        with open(ACTIVE_FILE, "r") as f:
+            data = json.load(f)
+    except:
+        data = []
+    if username not in data:
+        data.append(username)
+        with open(ACTIVE_FILE, "w") as f:
+            json.dump(data, f)
+
+def remove_active_student(username):
+    try:
+        with open(ACTIVE_FILE, "r") as f:
+            data = json.load(f)
+        data = [u for u in data if u != username]
+        with open(ACTIVE_FILE, "w") as f:
+            json.dump(data, f)
+    except:
+        pass
+
+def get_live_students():
+    try:
+        with open(ACTIVE_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return []
+
 # Questions
 QUESTIONS = [
     {"question": "What is the format specifier for an integer in C?", "options": ["%c", "%d", "%f", "%s"], "answer": "%d"},
     {"question": "Which loop is used when the number of iterations is known?", "options": ["while", "do-while", "for", "if"], "answer": "for"},
 ]
 
-# UI Starts
-st.title("🎓 Secure Quiz App with Webcam 🎥")
-
-menu = ["Register", "Login", "Take Quiz", "Change Password", "Professor Panel"]
+# UI
+st.title("\U0001F393 Secure Quiz App with Webcam \U0001F4F5")
+menu = ["Register", "Login", "Take Quiz", "Change Password", "Professor Panel", "Professor Monitoring Panel"]
 choice = st.sidebar.selectbox("Menu", menu)
 
 if choice == "Register":
@@ -106,21 +129,22 @@ elif choice == "Take Quiz":
         start_time = time.time()
         answers = {}
 
-        # Silently activate and persist camera (camera light on, nearly invisible stream)
+        add_active_student(username)
+
         st.session_state.camera_active = True
-        ctx = webrtc_streamer(
+        webrtc_streamer(
             key="quiz_camera_hidden",
             mode=WebRtcMode.SENDRECV,
             media_stream_constraints={"video": True, "audio": False},
             video_html_attrs={
                 "style": {
-                    "width": "100px",         # Small but keeps session stable
+                    "width": "100px",
                     "height": "75px",
-                    "opacity": "0.1",         # Low visibility to avoid browser optimization
+                    "opacity": "0.1",
                     "position": "absolute",
                     "top": "0px",
                     "left": "0px",
-                    "z-index": "-1"           # Pushed behind other elements
+                    "z-index": "-1"
                 }
             }
         )
@@ -145,22 +169,18 @@ elif choice == "Take Quiz":
             df.to_csv(PROF_CSV_FILE, index=False)
             df[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
             st.success(f"Quiz submitted! Your score: {score}")
-
-            # Optional: Turn off camera after quiz (you can comment this out to keep it running)
+            remove_active_student(username)
             st.session_state.camera_active = False
 
-
-
 elif choice == "Professor Panel":
-    st.subheader("🧑‍🏫 Professor Access Panel")
-
+    st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
     if not st.session_state.prof_verified:
         prof_user = st.text_input("Professor Username")
         prof_pass = st.text_input("Professor Password", type="password")
         if st.button("Verify Professor"):
             if prof_user.strip().lower() == "raj kumar" and prof_pass.strip().lower() == "raj kumar":
                 st.session_state.prof_verified = True
-                st.success("Professor verified! You can now download results.")
+                st.success("Professor verified! You can now access results.")
             else:
                 st.error("Access denied. Invalid professor credentials.")
     else:
@@ -168,10 +188,25 @@ elif choice == "Professor Panel":
         if os.path.exists(PROF_CSV_FILE):
             with open(PROF_CSV_FILE, "rb") as file:
                 st.download_button(
-                    label="📥 Download Results CSV",
+                    label="\U0001F4E5 Download Results CSV",
                     data=file,
                     file_name="prof_quiz_results.csv",
                     mime="text/csv"
                 )
         else:
             st.warning("No results available yet.")
+
+elif choice == "Professor Monitoring Panel":
+    if not st.session_state.prof_verified:
+        st.warning("Professor access only. Please login via 'Professor Panel' to verify.")
+    else:
+        st.header("\U0001F4E1 Live Student Monitoring")
+        st.info("Students currently taking the quiz will appear here.")
+        live_stream_ids = get_live_students()
+        if not live_stream_ids:
+            st.write("No active students currently taking the quiz.")
+        else:
+            for student_id in live_stream_ids:
+                st.subheader(f"Live Feed from: {student_id}")
+                st.warning("Note: Real-time video streaming from remote users is not supported on Streamlit Community Cloud.")
+                st.write(f"\U0001F464 {student_id} is currently taking the quiz.")
