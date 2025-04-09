@@ -129,7 +129,7 @@ elif choice == "Take Quiz":
             st.subheader("📷 Please make sure your webcam is turned ON for monitoring")
             st.info("Your webcam should be on, and the quiz is being monitored.")
 
-            webrtc_streamer(key="quiz", video_transformer_factory=VideoTransformer)
+            webrtc_ctx = webrtc_streamer(key="quiz", video_transformer_factory=VideoTransformer)
 
             for idx, question in enumerate(QUESTIONS):
                 st.markdown(f"**Q{idx+1}:** {question['question']}")
@@ -159,6 +159,9 @@ elif choice == "Take Quiz":
                 conn.commit()
                 conn.close()
 
+                if webrtc_ctx and webrtc_ctx.state.playing:
+                    webrtc_ctx.stop()
+
 elif choice == "Change Password":
     if not st.session_state.logged_in:
         st.warning("Please login first!")
@@ -181,7 +184,7 @@ elif choice == "Change Password":
                     if result:
                         conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?", (username,))
                     else:
-                        conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)", (username,))
+                        conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)")
                     conn.commit()
                     st.success("Password updated successfully.")
                 conn.close()
