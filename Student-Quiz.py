@@ -132,6 +132,7 @@ elif choice == "Take Quiz":
         add_active_student(username)
 
         st.session_state.camera_active = True
+        st.markdown("<span style='color:red;'>\U0001F534 Webcam is active and monitoring...</span>", unsafe_allow_html=True)
         webrtc_streamer(
             key="quiz_camera_hidden",
             mode=WebRtcMode.SENDRECV,
@@ -174,7 +175,7 @@ elif choice == "Take Quiz":
                 st.session_state.camera_active = False
             remove_active_student(username)
             st.session_state.quiz_submitted = True
-            st.rerun()
+            st.experimental_set_query_params()  # replacing experimental_rerun with query param reset to trigger rerender
 
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
