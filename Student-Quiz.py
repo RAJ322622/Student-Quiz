@@ -159,30 +159,34 @@ elif choice == "Take Quiz":
             answers[question['question']] = ans
 
         if st.button("Submit Quiz") and not st.session_state.quiz_submitted:
-            for q in QUESTIONS:
-                if answers.get(q["question"]) == q["answer"]:
-                    score += 1
-            time_taken = round(time.time() - start_time, 2)
+            # Check if all questions have been answered
+            if None in answers.values():
+                st.error("Please answer all questions before submitting the quiz.")
+            else:
+                for q in QUESTIONS:
+                    if answers.get(q["question"]) == q["answer"]:
+                        score += 1
+                time_taken = round(time.time() - start_time, 2)
 
-            new_row = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now()]],
-                                   columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
+                new_row = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now()]],
+                                       columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
 
-            try:
-                old_df_prof = pd.read_csv(PROF_CSV_FILE)
-                full_df = pd.concat([old_df_prof, new_row], ignore_index=True)
-            except FileNotFoundError:
-                full_df = new_row
-            full_df.to_csv(PROF_CSV_FILE, index=False)
+                try:
+                    old_df_prof = pd.read_csv(PROF_CSV_FILE)
+                    full_df = pd.concat([old_df_prof, new_row], ignore_index=True)
+                except FileNotFoundError:
+                    full_df = new_row
+                full_df.to_csv(PROF_CSV_FILE, index=False)
 
-            new_row[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(
-                STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE)
-            )
+                new_row[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(
+                    STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE)
+                )
 
-            st.success(f"Quiz submitted! Your score: {score}")
+                st.success(f"Quiz submitted! Your score: {score}")
 
-            remove_active_student(username)
-            st.session_state.camera_active = False
-            st.session_state.quiz_submitted = True
+                remove_active_student(username)
+                st.session_state.camera_active = False
+                st.session_state.quiz_submitted = True
 
 elif choice == "Change Password":
     if not st.session_state.logged_in:
