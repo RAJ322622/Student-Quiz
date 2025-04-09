@@ -127,19 +127,19 @@ elif choice == "Take Quiz":
                 def transform(self, frame):
                     return frame
 
-            try:
-                webrtc_streamer(
-                    key="quiz_camera",
-                    mode=WebRtcMode.SENDONLY,
-                    client_settings=ClientSettings(
-                        media_stream_constraints={"video": True, "audio": False},
-                        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-                    ),
-                    video_transformer_factory=VideoTransformer,
-                    async_processing=True
-                )
-            except Exception as e:
-                st.warning("Webcam connection failed. Please check your browser permissions and network.")
+            webrtc_ctx = webrtc_streamer(
+                key="quiz_camera",
+                mode=WebRtcMode.SENDONLY,
+                client_settings=ClientSettings(
+                    media_stream_constraints={"video": True, "audio": False},
+                    rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+                ),
+                video_transformer_factory=VideoTransformer,
+                async_processing=True
+            )
+
+            if not webrtc_ctx.state.playing:
+                st.error("❌ Webcam connection failed. Please check browser permissions and refresh the page.")
 
             for idx, question in enumerate(QUESTIONS):
                 st.markdown(f"**Q{idx+1}:** {question['question']}")
