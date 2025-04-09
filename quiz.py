@@ -173,13 +173,13 @@ elif choice == "Professor Panel":
         prof_user = st.text_input("Professor Username")
         prof_pass = st.text_input("Professor Password", type="password")
         if st.button("Verify Professor"):
-            if authenticate_user(prof_user, prof_pass) and get_user_role(prof_user) == "professor":
+            if prof_user.strip().lower() == "raj kumar" and prof_pass.strip().lower() == "raj kumar":
                 st.session_state.prof_verified = True
                 st.success("Professor verified! You can now download results.")
             else:
-                st.error("Access denied. Invalid credentials or not a professor.")
+                st.error("Access denied. Invalid professor credentials.")
     else:
-        st.success("Welcome Professor!")
+        st.success("Welcome Professor Raj Kumar!")
         if os.path.exists(PROF_CSV_FILE):
             with open(PROF_CSV_FILE, "rb") as file:
                 st.download_button(
