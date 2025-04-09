@@ -162,21 +162,27 @@ elif choice == "Take Quiz":
                 if answers.get(q["question"]) == q["answer"]:
                     score += 1
             time_taken = round(time.time() - start_time, 2)
-            df = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now()]],
-                              columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
+
+            new_row = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now()]],
+                                   columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
+
             try:
                 old_df_prof = pd.read_csv(PROF_CSV_FILE)
-                df = pd.concat([old_df_prof, df], ignore_index=True)
+                full_df = pd.concat([old_df_prof, new_row], ignore_index=True)
             except FileNotFoundError:
-                pass
-            df.to_csv(PROF_CSV_FILE, index=False)
-            df[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
+                full_df = new_row
+            full_df.to_csv(PROF_CSV_FILE, index=False)
+
+            new_row[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(
+                STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE)
+            )
+
             st.success(f"Quiz submitted! Your score: {score}")
 
             remove_active_student(username)
             st.session_state.camera_active = False
             st.session_state.quiz_submitted = True
-            st.experimental_set_query_params()  # Resets URL to refresh safely
+            st.experimental_set_query_params()
 
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
