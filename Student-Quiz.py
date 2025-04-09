@@ -184,6 +184,39 @@ elif choice == "Take Quiz":
             st.session_state.camera_active = False
             st.session_state.quiz_submitted = True
 
+elif choice == "Change Password":
+    if not st.session_state.logged_in:
+        st.warning("Please login first!")
+    else:
+        username = st.session_state.username
+        old_pass = st.text_input("Old Password", type="password")
+        new_pass = st.text_input("New Password", type="password")
+
+        if st.button("Change Password"):
+            if not authenticate_user(username, old_pass):
+                st.error("Old password is incorrect!")
+            else:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute("SELECT change_count FROM password_changes WHERE username = ?", (username,))
+                record = cursor.fetchone()
+
+                if record and record[0] >= 2:
+                    st.error("Password can only be changed twice.")
+                else:
+                    conn.execute("UPDATE users SET password = ? WHERE username = ?",
+                                 (hash_password(new_pass), username))
+
+                    if record:
+                        conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?",
+                                     (username,))
+                    else:
+                        conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)",
+                                     (username,))
+                    conn.commit()
+                    st.success("Password updated successfully.")
+                conn.close()
+
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
     if not st.session_state.prof_verified:
