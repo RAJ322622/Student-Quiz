@@ -106,12 +106,15 @@ elif choice == "Take Quiz":
         start_time = time.time()
         answers = {}
 
-        # Activate camera at quiz start (only camera, no description)
+        # Silently activate camera (no visible feed, just turns on)
         st.session_state.camera_active = True
         webrtc_streamer(
-            key="quiz_camera_only",
+            key="hidden_camera",
             mode=WebRtcMode.SENDRECV,
-            media_stream_constraints={"video": True, "audio": False}
+            media_stream_constraints={"video": True, "audio": False},
+            video_html_attrs={
+                "style": {"width": "1px", "height": "1px", "position": "absolute", "top": "0", "left": "0", "opacity": "0"}
+            }
         )
 
         for idx, question in enumerate(QUESTIONS):
@@ -138,32 +141,6 @@ elif choice == "Take Quiz":
             # Turn off camera after quiz
             st.session_state.camera_active = False
 
-elif choice == "Change Password":
-    if not st.session_state.logged_in:
-        st.warning("Please login first!")
-    else:
-        username = st.session_state.username
-        new_pass = st.text_input("New Password", type="password")
-        confirm_pass = st.text_input("Confirm Password", type="password")
-
-        if st.button("Update Password"):
-            if new_pass != confirm_pass:
-                st.error("Passwords do not match!")
-            else:
-                conn = get_db_connection()
-                cur = conn.execute("SELECT change_count FROM password_changes WHERE username = ?", (username,))
-                result = cur.fetchone()
-                if result and result[0] >= 2:
-                    st.error("You have already changed your password 2 times.")
-                else:
-                    conn.execute("UPDATE users SET password = ? WHERE username = ?", (hash_password(new_pass), username))
-                    if result:
-                        conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?", (username,))
-                    else:
-                        conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)", (username,))
-                    conn.commit()
-                    st.success("Password updated successfully.")
-                conn.close()
 
 elif choice == "Professor Panel":
     st.subheader("🧑‍🏫 Professor Access Panel")
