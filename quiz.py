@@ -5,11 +5,10 @@ import time
 import pandas as pd
 import os
 from datetime import datetime
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
+from streamlit_webrtc import webrtc_streamer, WebRtcMode
 
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
-VIDEO_SAVE_FOLDER = "videos"
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -20,8 +19,8 @@ if "username" not in st.session_state:
 if "camera_active" not in st.session_state:
     st.session_state.camera_active = False
 
-# Ensure video folder exists
-os.makedirs(VIDEO_SAVE_FOLDER, exist_ok=True)
+if "prof_verified" not in st.session_state:
+    st.session_state.prof_verified = False
 
 # Database connection
 def get_db_connection():
@@ -40,12 +39,12 @@ def get_db_connection():
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-# Register user (only students)
-def register_user(username, password):
+# Register user
+def register_user(username, password, role):
     conn = get_db_connection()
     try:
-        conn.execute("INSERT INTO users (username, password, role) VALUES (?, ?, 'student')",
-                     (username, hash_password(password)))
+        conn.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+                     (username, hash_password(password), role))
         conn.commit()
         st.success("Registration successful! Please login.")
     except sqlite3.IntegrityError:
@@ -54,8 +53,6 @@ def register_user(username, password):
 
 # Authenticate user
 def authenticate_user(username, password):
-    if username == "professor" and password == "prof123":
-        return True
     conn = get_db_connection()
     cursor = conn.execute("SELECT password FROM users WHERE username = ?", (username,))
     user = cursor.fetchone()
@@ -64,8 +61,6 @@ def authenticate_user(username, password):
 
 # Get user role
 def get_user_role(username):
-    if username == "professor":
-        return "professor"
     conn = get_db_connection()
     cursor = conn.execute("SELECT role FROM users WHERE username = ?", (username,))
     role = cursor.fetchone()
@@ -81,20 +76,16 @@ QUESTIONS = [
 # UI Starts
 st.title("🎓 Secure Quiz App with Webcam 🎥")
 
-menu = ["Register", "Login", "Take Quiz", "Change Password", "Download Results (Prof Only)", "Quiz Video Recordings (Prof Only)"]
+menu = ["Register", "Login", "Take Quiz", "Change Password", "Professor Panel"]
 choice = st.sidebar.selectbox("Menu", menu)
 
-# Register (Only Students)
 if choice == "Register":
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
+    role = st.selectbox("Role", ["student", "professor"])
     if st.button("Register"):
-        if username.lower() == "professor":
-            st.error("You cannot register as professor. Use the default credentials.")
-        else:
-            register_user(username, password)
+        register_user(username, password, role)
 
-# Login
 elif choice == "Login":
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
@@ -106,120 +97,96 @@ elif choice == "Login":
         else:
             st.error("Invalid credentials!")
 
-# Take Quiz
 elif choice == "Take Quiz":
     if not st.session_state.logged_in:
         st.warning("Please login first!")
     else:
         username = st.session_state.username
-        role = get_user_role(username)
-        if role != "student":
-            st.warning("Only students can take the quiz.")
-        else:
-            score = 0
-            start_time = time.time()
-            answers = {}
+        score = 0
+        start_time = time.time()
+        answers = {}
 
-            # Activate camera at quiz start
-            st.session_state.camera_active = True
-            st.subheader("📷 Camera Monitoring Active During Quiz")
-            webrtc_streamer(
-                key="quiz_camera",
-                mode=WebRtcMode.SENDRECV,
-                media_stream_constraints={"video": True, "audio": False},
-                client_settings=ClientSettings(
-                    media_stream_constraints={"video": True, "audio": False},
-                    rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-                )
-            )
+        # Activate camera at quiz start
+        st.session_state.camera_active = True
+        st.subheader("📷 Camera Monitoring Active During Quiz")
+        webrtc_streamer(
+            key="quiz_camera",
+            mode=WebRtcMode.SENDRECV,
+            media_stream_constraints={"video": True, "audio": False}
+        )
 
-            for idx, question in enumerate(QUESTIONS):
-                st.markdown(f"**Q{idx+1}:** {question['question']}")
-                ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
-                answers[question['question']] = ans
+        for idx, question in enumerate(QUESTIONS):
+            st.markdown(f"**Q{idx+1}:** {question['question']}")
+            ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
+            answers[question['question']] = ans
 
-            if st.button("Submit Quiz"):
-                for q in QUESTIONS:
-                    if answers.get(q["question"]) == q["answer"]:
-                        score += 1
-                time_taken = round(time.time() - start_time, 2)
-                df = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now()]],
-                                  columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
+        if st.button("Submit Quiz"):
+            for q in QUESTIONS:
+                if answers.get(q["question"]) == q["answer"]:
+                    score += 1
+            time_taken = round(time.time() - start_time, 2)
+            df = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now()]],
+                              columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
+            try:
+                old_df_prof = pd.read_csv(PROF_CSV_FILE)
+                df = pd.concat([old_df_prof, df], ignore_index=True)
+            except FileNotFoundError:
+                pass
+            df.to_csv(PROF_CSV_FILE, index=False)
+            df[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
+            st.success(f"Quiz submitted! Your score: {score}")
 
-                try:
-                    old_df_prof = pd.read_csv(PROF_CSV_FILE)
-                    df = pd.concat([old_df_prof, df], ignore_index=True)
-                except FileNotFoundError:
-                    pass
-                df.to_csv(PROF_CSV_FILE, index=False)
-                df[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
-                st.success(f"Quiz submitted! Your score: {score}")
+            # Turn off camera after quiz
+            st.session_state.camera_active = False
 
-                # Turn off camera after quiz
-                st.session_state.camera_active = False
-
-# Change Password
 elif choice == "Change Password":
     if not st.session_state.logged_in:
         st.warning("Please login first!")
     else:
         username = st.session_state.username
-        if username == "professor":
-            st.warning("Professor password is fixed and cannot be changed.")
-        else:
-            new_pass = st.text_input("New Password", type="password")
-            confirm_pass = st.text_input("Confirm Password", type="password")
-            if st.button("Update Password"):
-                if new_pass != confirm_pass:
-                    st.error("Passwords do not match!")
-                else:
-                    conn = get_db_connection()
-                    cur = conn.execute("SELECT change_count FROM password_changes WHERE username = ?", (username,))
-                    result = cur.fetchone()
-                    if result and result[0] >= 2:
-                        st.error("You have already changed your password 2 times.")
-                    else:
-                        conn.execute("UPDATE users SET password = ? WHERE username = ?", (hash_password(new_pass), username))
-                        if result:
-                            conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?", (username,))
-                        else:
-                            conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)", (username,))
-                        conn.commit()
-                        st.success("Password updated successfully.")
-                    conn.close()
+        new_pass = st.text_input("New Password", type="password")
+        confirm_pass = st.text_input("Confirm Password", type="password")
 
-# Download Results
-elif choice == "Download Results (Prof Only)":
-    if not st.session_state.logged_in:
-        st.warning("Please login first!")
-    else:
-        username = st.session_state.username
-        role = get_user_role(username)
-        if role != "professor":
-            st.error("Only professors can access this section.")
-        else:
-            st.subheader("📋 Download Quiz Results")
-            if os.path.exists(PROF_CSV_FILE):
-                with open(PROF_CSV_FILE, "rb") as file:
-                    st.download_button(
-                        label="📥 Download Results CSV (Professor Only)",
-                        data=file,
-                        file_name="prof_quiz_results.csv",
-                        mime="text/csv"
-                    )
+        if st.button("Update Password"):
+            if new_pass != confirm_pass:
+                st.error("Passwords do not match!")
             else:
-                st.warning("No result file found.")
+                conn = get_db_connection()
+                cur = conn.execute("SELECT change_count FROM password_changes WHERE username = ?", (username,))
+                result = cur.fetchone()
+                if result and result[0] >= 2:
+                    st.error("You have already changed your password 2 times.")
+                else:
+                    conn.execute("UPDATE users SET password = ? WHERE username = ?", (hash_password(new_pass), username))
+                    if result:
+                        conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?", (username,))
+                    else:
+                        conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)", (username,))
+                    conn.commit()
+                    st.success("Password updated successfully.")
+                conn.close()
 
-# Video Recordings
-elif choice == "Quiz Video Recordings (Prof Only)":
-    if not st.session_state.logged_in:
-        st.warning("Please login first!")
+elif choice == "Professor Panel":
+    st.subheader("🧑‍🏫 Professor Access Panel")
+
+    if not st.session_state.prof_verified:
+        prof_user = st.text_input("Professor Username")
+        prof_pass = st.text_input("Professor Password", type="password")
+        if st.button("Verify Professor"):
+            if authenticate_user(prof_user, prof_pass) and get_user_role(prof_user) == "professor":
+                st.session_state.prof_verified = True
+                st.success("Professor verified! You can now download results.")
+            else:
+                st.error("Access denied. Invalid credentials or not a professor.")
     else:
-        username = st.session_state.username
-        role = get_user_role(username)
-        if role != "professor":
-            st.error("Only professors can access this section.")
+        st.success("Welcome Professor!")
+        if os.path.exists(PROF_CSV_FILE):
+            with open(PROF_CSV_FILE, "rb") as file:
+                st.download_button(
+                    label="📥 Download Results CSV",
+                    data=file,
+                    file_name="prof_quiz_results.csv",
+                    mime="text/csv"
+                )
         else:
-            st.subheader("🎞️ Recorded Quiz Videos")
-            st.info("⚠️ Note: Video recording is not supported on Streamlit Community Cloud. Use a custom server for this feature.")
-            # Placeholder: Future integration with video file listing if saved externally
+            st.warning("No results available yet.")
