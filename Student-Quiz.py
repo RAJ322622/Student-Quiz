@@ -7,14 +7,13 @@ import os
 import json
 from datetime import datetime
 from streamlit_webrtc import webrtc_streamer, WebRtcMode
-from streamlit_autorefresh import st_autorefresh
 
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
 ACTIVE_FILE = "active_students.json"
 
 # Session state defaults
-for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_submitted"]:
+for key in ["logged_in", "username", "camera_active", "prof_verified"]:
     if key not in st.session_state:
         st.session_state[key] = False if key != "username" else ""
 
@@ -130,59 +129,48 @@ elif choice == "Take Quiz":
         start_time = time.time()
         answers = {}
 
-        if not st.session_state.quiz_submitted:
-            add_active_student(username)
-            st.session_state.camera_active = True
+        add_active_student(username)
 
-        if st.session_state.camera_active and not st.session_state.quiz_submitted:
-            st.markdown("<span style='color:red;'>\U0001F7E2 Webcam is ON</span>", unsafe_allow_html=True)
-            webrtc_streamer(
-                key="quiz_camera_hidden",
-                mode=WebRtcMode.SENDRECV,
-                media_stream_constraints={"video": True, "audio": False},
-                video_html_attrs={
-                    "style": {
-                        "width": "0px",
-                        "height": "0px",
-                        "opacity": "0.01",
-                        "position": "absolute",
-                        "top": "0px",
-                        "left": "0px",
-                        "z-index": "-1"
-                    }
+        st.session_state.camera_active = True
+        webrtc_streamer(
+            key="quiz_camera_hidden",
+            mode=WebRtcMode.SENDRECV,
+            media_stream_constraints={"video": True, "audio": False},
+            video_html_attrs={
+                "style": {
+                    "width": "100px",
+                    "height": "75px",
+                    "opacity": "0.1",
+                    "position": "absolute",
+                    "top": "0px",
+                    "left": "0px",
+                    "z-index": "-1"
                 }
-            )
+            }
+        )
 
         for idx, question in enumerate(QUESTIONS):
             st.markdown(f"**Q{idx+1}:** {question['question']}")
             ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
             answers[question['question']] = ans
 
-        if st.button("Submit Quiz") and not st.session_state.quiz_submitted:
+        if st.button("Submit Quiz"):
             for q in QUESTIONS:
                 if answers.get(q["question"]) == q["answer"]:
                     score += 1
             time_taken = round(time.time() - start_time, 2)
-
-            new_row = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now()]],
-                                   columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
-
+            df = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now()]],
+                              columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
             try:
                 old_df_prof = pd.read_csv(PROF_CSV_FILE)
-                full_df = pd.concat([old_df_prof, new_row], ignore_index=True)
+                df = pd.concat([old_df_prof, df], ignore_index=True)
             except FileNotFoundError:
-                full_df = new_row
-            full_df.to_csv(PROF_CSV_FILE, index=False)
-
-            new_row[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(
-                STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE)
-            )
-
+                pass
+            df.to_csv(PROF_CSV_FILE, index=False)
+            df[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
             st.success(f"Quiz submitted! Your score: {score}")
-
             remove_active_student(username)
             st.session_state.camera_active = False
-            st.session_state.quiz_submitted = True
 
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
@@ -212,7 +200,6 @@ elif choice == "Professor Monitoring Panel":
     if not st.session_state.prof_verified:
         st.warning("Professor access only. Please login via 'Professor Panel' to verify.")
     else:
-        st_autorefresh(interval=10 * 1000, key="monitor_refresh")
         st.header("\U0001F4E1 Live Student Monitoring")
         st.info("Students currently taking the quiz will appear here.")
         live_stream_ids = get_live_students()
