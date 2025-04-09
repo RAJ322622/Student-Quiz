@@ -82,7 +82,7 @@ choice = st.sidebar.selectbox("Menu", menu)
 if choice == "Register":
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
-    role = st.selectbox("Role", ["student", "professor"])
+    role = st.selectbox("Role", ["student"])
     if st.button("Register"):
         register_user(username, password, role)
 
