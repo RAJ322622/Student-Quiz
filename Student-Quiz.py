@@ -130,7 +130,7 @@ elif choice == "Take Quiz":
         start_time = time.time()
         answers = {}
 
-        if not st.session_state.quiz_submitted:
+        if not st.session_state.quiz_submitted and not st.session_state.camera_active:
             add_active_student(username)
             st.session_state.camera_active = True
 
