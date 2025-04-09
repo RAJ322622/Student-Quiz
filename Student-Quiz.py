@@ -6,19 +6,22 @@ import pandas as pd
 import os
 import json
 from datetime import datetime
-from streamlit_webrtc import webrtc_streamer, WebRtcMode
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, VideoTransformerBase
 from streamlit_autorefresh import st_autorefresh
+import av
 
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
 ACTIVE_FILE = "active_students.json"
+RECORDING_DIR = "recordings"
+os.makedirs(RECORDING_DIR, exist_ok=True)
 
 # Session state defaults
 for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_submitted", "usn", "section"]:
     if key not in st.session_state:
         st.session_state[key] = False if key not in ["username", "usn", "section"] else ""
 
-# Database connection
+# DB connection
 def get_db_connection():
     conn = sqlite3.connect('quiz_app.db')
     conn.execute('''CREATE TABLE IF NOT EXISTS users (
@@ -95,15 +98,20 @@ def get_live_students():
     except:
         return []
 
-# Questions
+# Dummy question bank
 QUESTIONS = [
     {"question": "What is the format specifier for an integer in C?", "options": ["%c", "%d", "%f", "%s"], "answer": "%d"},
     {"question": "Which loop is used when the number of iterations is known?", "options": ["while", "do-while", "for", "if"], "answer": "for"},
 ]
 
-# UI
+# Video processor
+class VideoProcessor(VideoTransformerBase):
+    def recv(self, frame):
+        return frame
+
+# UI Starts
 st.title("\U0001F393 Secure Quiz App with Webcam \U0001F4F5")
-menu = ["Register", "Login", "Take Quiz", "Change Password", "Professor Panel", "Professor Monitoring Panel"]
+menu = ["Register", "Login", "Take Quiz", "Change Password", "Professor Panel", "Professor Monitoring Panel", "View Recorded Video"]
 choice = st.sidebar.selectbox("Menu", menu)
 
 if choice == "Register":
@@ -121,112 +129,87 @@ elif choice == "Login":
             st.session_state.logged_in = True
             st.session_state.username = username
             st.success("Login successful!")
-        else:
-            st.error("Invalid credentials!")
 
 elif choice == "Take Quiz":
     if not st.session_state.logged_in:
         st.warning("Please login first!")
     else:
         username = st.session_state.username
+        usn = st.text_input("Enter your USN")
+        section = st.text_input("Enter your Section")
+        st.session_state.usn = usn.strip().upper()
+        st.session_state.section = section.strip().upper()
 
-        if not st.session_state.usn:
-            st.session_state.usn = st.text_input("Enter your USN")
-        if not st.session_state.section:
-            st.session_state.section = st.text_input("Enter your Section (e.g., A, B, C)")
+        if usn and section:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT attempt_count FROM quiz_attempts WHERE username = ?", (username,))
+            record = cur.fetchone()
+            attempt_count = record[0] if record else 0
 
-        if not st.session_state.usn or not st.session_state.section:
-            st.warning("Please enter your USN and Section to continue.")
-            st.stop()
+            if attempt_count >= 2:
+                st.error("You have already taken the quiz 2 times. No more attempts allowed.")
+            else:
+                score = 0
+                start_time = time.time()
+                answers = {}
 
-        # Check quiz attempts
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT attempt_count FROM quiz_attempts WHERE username = ?", (username,))
-        record = cur.fetchone()
-        attempt_count = record[0] if record else 0
+                if not st.session_state.quiz_submitted and not st.session_state.camera_active:
+                    add_active_student(username)
+                    st.session_state.camera_active = True
 
-        if attempt_count >= 2:
-            st.error("You have already taken the quiz 2 times. No more attempts allowed.")
-        else:
-            score = 0
-            start_time = time.time()
-            answers = {}
+                if st.session_state.camera_active and not st.session_state.quiz_submitted:
+                    st.markdown("<span style='color:red;'>\U0001F7E2 Webcam is ON</span>", unsafe_allow_html=True)
+                    webrtc_streamer(
+                        key="camera",
+                        mode=WebRtcMode.SENDRECV,
+                        media_stream_constraints={"video": True, "audio": False},
+                        video_processor_factory=VideoProcessor,
+                    )
 
-            if not st.session_state.quiz_submitted and not st.session_state.camera_active:
-                add_active_student(username)
-                st.session_state.camera_active = True
+                for idx, question in enumerate(QUESTIONS):
+                    st.markdown(f"**Q{idx+1}:** {question['question']}")
+                    ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
+                    answers[question['question']] = ans
 
-            if st.session_state.camera_active and not st.session_state.quiz_submitted:
-                st.markdown("<span style='color:red;'>\U0001F7E2 Webcam is ON</span>", unsafe_allow_html=True)
-                webrtc_streamer(
-                    key="quiz_camera_hidden",
-                    mode=WebRtcMode.SENDRECV,
-                    media_stream_constraints={"video": True, "audio": False},
-                    video_html_attrs={
-                        "style": {
-                            "width": "0px",
-                            "height": "0px",
-                            "opacity": "0.01",
-                            "position": "absolute",
-                            "top": "0px",
-                            "left": "0px",
-                            "z-index": "-1"
-                        }
-                    }
-                )
-
-            for idx, question in enumerate(QUESTIONS):
-                st.markdown(f"**Q{idx+1}:** {question['question']}")
-                ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
-                answers[question['question']] = ans
-
-            if st.button("Submit Quiz") and not st.session_state.quiz_submitted:
-                if None in answers.values():
-                    st.error("Please answer all questions before submitting the quiz.")
-                else:
-                    for q in QUESTIONS:
-                        if answers.get(q["question"]) == q["answer"]:
-                            score += 1
-                    time_taken = round(time.time() - start_time, 2)
-
-                    usn = st.session_state.usn
-                    section = st.session_state.section.upper()
-                    timestamp = datetime.now()
-
-                    new_row = pd.DataFrame([[username, usn, section, hash_password(username), score, time_taken, timestamp]],
-                                           columns=["Username", "USN", "Section", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
-
-                    # Professor results
-                    try:
-                        old_df_prof = pd.read_csv(PROF_CSV_FILE)
-                        full_df = pd.concat([old_df_prof, new_row], ignore_index=True)
-                    except FileNotFoundError:
-                        full_df = new_row
-                    full_df.to_csv(PROF_CSV_FILE, index=False)
-
-                    # Student CSV
-                    new_row[["Username", "USN", "Section", "Score", "Time_Taken", "Timestamp"]].to_csv(
-                        STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
-
-                    # Section-wise CSV
-                    section_file = f"section_{section}.csv"
-                    new_row[["Username", "USN", "Section", "Score", "Time_Taken", "Timestamp"]].to_csv(
-                        section_file, mode='a', index=False, header=not os.path.exists(section_file))
-
-                    st.success(f"Quiz submitted! Your score: {score}")
-
-                    if record:
-                        conn.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
+                if st.button("Submit Quiz") and not st.session_state.quiz_submitted:
+                    if None in answers.values():
+                        st.error("Please answer all questions before submitting the quiz.")
                     else:
-                        conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, 1)", (username,))
-                    conn.commit()
+                        for q in QUESTIONS:
+                            if answers.get(q["question"]) == q["answer"]:
+                                score += 1
+                        time_taken = round(time.time() - start_time, 2)
 
-                    remove_active_student(username)
-                    st.session_state.camera_active = False
-                    st.session_state.quiz_submitted = True
+                        new_row = pd.DataFrame([[username, hash_password(username), st.session_state.usn, st.session_state.section, score, time_taken, datetime.now()]],
+                                               columns=["Username", "Hashed_Password", "USN", "Section", "Score", "Time_Taken", "Timestamp"])
 
-        conn.close()
+                        try:
+                            old_df_prof = pd.read_csv(PROF_CSV_FILE)
+                            full_df = pd.concat([old_df_prof, new_row], ignore_index=True)
+                        except FileNotFoundError:
+                            full_df = new_row
+                        full_df.to_csv(PROF_CSV_FILE, index=False)
+
+                        new_row[["Username", "USN", "Section", "Score", "Time_Taken", "Timestamp"]].to_csv(
+                            STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE)
+                        )
+
+                        section_csv = f"section_{st.session_state.section}.csv"
+                        new_row.to_csv(section_csv, mode='a', index=False, header=not os.path.exists(section_csv))
+
+                        st.success(f"Quiz submitted! Your score: {score}")
+
+                        if record:
+                            conn.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
+                        else:
+                            conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, 1)", (username,))
+                        conn.commit()
+
+                        remove_active_student(username)
+                        st.session_state.camera_active = False
+                        st.session_state.quiz_submitted = True
+            conn.close()
 
 elif choice == "Change Password":
     if not st.session_state.logged_in:
@@ -235,7 +218,6 @@ elif choice == "Change Password":
         username = st.session_state.username
         old_pass = st.text_input("Old Password", type="password")
         new_pass = st.text_input("New Password", type="password")
-
         if st.button("Change Password"):
             if not authenticate_user(username, old_pass):
                 st.error("Old password is incorrect!")
@@ -244,13 +226,11 @@ elif choice == "Change Password":
                 cursor = conn.cursor()
                 cursor.execute("SELECT change_count FROM password_changes WHERE username = ?", (username,))
                 record = cursor.fetchone()
-
                 if record and record[0] >= 2:
                     st.error("Password can only be changed twice.")
                 else:
                     conn.execute("UPDATE users SET password = ? WHERE username = ?",
                                  (hash_password(new_pass), username))
-
                     if record:
                         conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?",
                                      (username,))
@@ -276,12 +256,7 @@ elif choice == "Professor Panel":
         st.success("Welcome Professor Raj Kumar!")
         if os.path.exists(PROF_CSV_FILE):
             with open(PROF_CSV_FILE, "rb") as file:
-                st.download_button(
-                    label="\U0001F4E5 Download Results CSV",
-                    data=file,
-                    file_name="prof_quiz_results.csv",
-                    mime="text/csv"
-                )
+                st.download_button("\U0001F4E5 Download Results CSV", file, "prof_quiz_results.csv", mime="text/csv")
         else:
             st.warning("No results available yet.")
 
@@ -300,3 +275,12 @@ elif choice == "Professor Monitoring Panel":
                 st.subheader(f"Live Feed from: {student_id}")
                 st.warning("Note: Real-time video streaming from remote users is not supported on Streamlit Community Cloud.")
                 st.write(f"\U0001F464 {student_id} is currently taking the quiz.")
+
+elif choice == "View Recorded Video":
+    st.subheader("Recorded Quiz Videos")
+    video_files = [f for f in os.listdir(RECORDING_DIR) if f.endswith(".mp4")]
+    if video_files:
+        selected_video = st.selectbox("Select a recorded video:", video_files)
+        st.video(os.path.join(RECORDING_DIR, selected_video))
+    else:
+        st.warning("No recorded videos found.")
