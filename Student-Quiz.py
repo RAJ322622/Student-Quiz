@@ -174,7 +174,7 @@ elif choice == "Take Quiz":
                 st.session_state.camera_active = False
             remove_active_student(username)
             st.session_state.quiz_submitted = True
-            st.experimental_rerun()
+            st.rerun()
 
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
