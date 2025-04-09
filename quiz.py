@@ -19,10 +19,6 @@ if "username" not in st.session_state:
 if "camera_active" not in st.session_state:
     st.session_state.camera_active = False
 
-# Constants for professor credentials
-PROFESSOR_USERNAME = "raj kumar"
-PROFESSOR_PASSWORD = "raj kumar"
-
 # Database connection
 def get_db_connection():
     conn = sqlite3.connect('quiz_app.db')
@@ -54,8 +50,6 @@ def register_user(username, password, role):
 
 # Authenticate user
 def authenticate_user(username, password):
-    if username == PROFESSOR_USERNAME and password == PROFESSOR_PASSWORD:
-        return True
     conn = get_db_connection()
     cursor = conn.execute("SELECT password FROM users WHERE username = ?", (username,))
     user = cursor.fetchone()
@@ -64,8 +58,6 @@ def authenticate_user(username, password):
 
 # Get user role
 def get_user_role(username):
-    if username == PROFESSOR_USERNAME:
-        return "professor"
     conn = get_db_connection()
     cursor = conn.execute("SELECT role FROM users WHERE username = ?", (username,))
     role = cursor.fetchone()
@@ -81,10 +73,17 @@ QUESTIONS = [
 # UI Starts
 st.title("🎓 Secure Quiz App with Webcam 🎥")
 
-menu = ["Login", "Take Quiz", "Change Password", "Download Results (Prof Only)"]
+menu = ["Register", "Login", "Take Quiz", "Change Password", "Download Results (Prof Only)"]
 choice = st.sidebar.selectbox("Menu", menu)
 
-if choice == "Login":
+if choice == "Register":
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    role = st.selectbox("Role", ["student", "professor"])
+    if st.button("Register"):
+        register_user(username, password, role)
+
+elif choice == "Login":
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
     if st.button("Login"):
@@ -105,9 +104,7 @@ elif choice == "Take Quiz":
         answers = {}
 
         # Activate camera at quiz start
-        if not st.session_state.camera_active:
-            st.session_state.camera_active = True
-
+        st.session_state.camera_active = True
         st.subheader("📷 Camera Monitoring Active During Quiz")
         webrtc_streamer(
             key="quiz_camera",
@@ -144,30 +141,27 @@ elif choice == "Change Password":
         st.warning("Please login first!")
     else:
         username = st.session_state.username
-        if username == PROFESSOR_USERNAME:
-            st.warning("Professor password cannot be changed.")
-        else:
-            new_pass = st.text_input("New Password", type="password")
-            confirm_pass = st.text_input("Confirm Password", type="password")
+        new_pass = st.text_input("New Password", type="password")
+        confirm_pass = st.text_input("Confirm Password", type="password")
 
-            if st.button("Update Password"):
-                if new_pass != confirm_pass:
-                    st.error("Passwords do not match!")
+        if st.button("Update Password"):
+            if new_pass != confirm_pass:
+                st.error("Passwords do not match!")
+            else:
+                conn = get_db_connection()
+                cur = conn.execute("SELECT change_count FROM password_changes WHERE username = ?", (username,))
+                result = cur.fetchone()
+                if result and result[0] >= 2:
+                    st.error("You have already changed your password 2 times.")
                 else:
-                    conn = get_db_connection()
-                    cur = conn.execute("SELECT change_count FROM password_changes WHERE username = ?", (username,))
-                    result = cur.fetchone()
-                    if result and result[0] >= 2:
-                        st.error("You have already changed your password 2 times.")
+                    conn.execute("UPDATE users SET password = ? WHERE username = ?", (hash_password(new_pass), username))
+                    if result:
+                        conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?", (username,))
                     else:
-                        conn.execute("UPDATE users SET password = ? WHERE username = ?", (hash_password(new_pass), username))
-                        if result:
-                            conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?", (username,))
-                        else:
-                            conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)", (username,))
-                        conn.commit()
-                        st.success("Password updated successfully.")
-                    conn.close()
+                        conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)", (username,))
+                    conn.commit()
+                    st.success("Password updated successfully.")
+                conn.close()
 
 elif choice == "Download Results (Prof Only)":
     if not st.session_state.logged_in:
