@@ -18,6 +18,9 @@ for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_sub
     if key not in st.session_state:
         st.session_state[key] = False if key != "username" and key != "student_section" else ""
 
+if "start_time" not in st.session_state:
+    st.session_state.start_time = 0
+
 # Database connection
 def get_db_connection():
     conn = sqlite3.connect('quiz_app.db')
@@ -146,17 +149,15 @@ elif choice == "Take Quiz":
                 st.error("You have already taken the quiz 2 times. No more attempts allowed.")
             else:
                 score = 0
-                start_time = time.time()
-                answers = {}
-
                 if not st.session_state.quiz_submitted and not st.session_state.camera_active:
                     add_active_student(username)
                     st.session_state.camera_active = True
+                    st.session_state.start_time = time.time()
 
                 if st.session_state.camera_active and not st.session_state.quiz_submitted:
                     st.markdown("<span style='color:red;'>\U0001F7E2 Webcam is ON</span>", unsafe_allow_html=True)
                     webrtc_streamer(
-                        key="quiz_camera_hidden",
+                        key=f"quiz_camera_{username}",
                         mode=WebRtcMode.SENDRECV,
                         media_stream_constraints={"video": True, "audio": False},
                         video_html_attrs={
@@ -172,6 +173,7 @@ elif choice == "Take Quiz":
                         }
                     )
 
+                answers = {}
                 for idx, question in enumerate(QUESTIONS):
                     st.markdown(f"**Q{idx+1}:** {question['question']}")
                     ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
@@ -184,7 +186,7 @@ elif choice == "Take Quiz":
                         for q in QUESTIONS:
                             if answers.get(q["question"]) == q["answer"]:
                                 score += 1
-                        time_taken = round(time.time() - start_time, 2)
+                        time_taken = round(time.time() - st.session_state.start_time, 2)
 
                         new_row = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now(), st.session_state.student_section]],
                                                columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp", "Section"])
@@ -200,7 +202,6 @@ elif choice == "Take Quiz":
                             STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE)
                         )
 
-                        # Save to section-specific file
                         section_file = f"section_{st.session_state.student_section}.csv"
                         try:
                             old_section_df = pd.read_csv(section_file)
