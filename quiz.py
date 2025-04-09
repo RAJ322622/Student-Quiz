@@ -5,9 +5,14 @@ import time
 import pandas as pd
 import os
 from datetime import datetime
+from streamlit.components.v1 import html
 
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
+RECORDINGS_DIR = "recordings"
+
+if not os.path.exists(RECORDINGS_DIR):
+    os.makedirs(RECORDINGS_DIR)
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -118,6 +123,45 @@ elif choice == "Take Quiz":
             st.subheader("📷 Please make sure your webcam is turned ON for monitoring")
             st.info("Your webcam should be on, and the quiz is being monitored.")
 
+            html("""
+            <video id="player" controls autoplay></video>
+            <button id="start">Start Recording</button>
+            <button id="stop">Stop & Save</button>
+            <script>
+            let mediaRecorder;
+            let recordedBlobs;
+
+            const player = document.getElementById('player');
+
+            navigator.mediaDevices.getUserMedia({video: true, audio: false})
+                .then(stream => {
+                    player.srcObject = stream;
+                    recordedBlobs = [];
+                    mediaRecorder = new MediaRecorder(stream);
+
+                    mediaRecorder.ondataavailable = event => {
+                        if (event.data.size > 0) recordedBlobs.push(event.data);
+                    };
+
+                    document.getElementById("start").onclick = () => {
+                        recordedBlobs = [];
+                        mediaRecorder.start();
+                    };
+
+                    document.getElementById("stop").onclick = () => {
+                        mediaRecorder.stop();
+                        let blob = new Blob(recordedBlobs, {type: 'video/webm'});
+                        let url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = '""" + username + "_recording.webm"';
+                        document.body.appendChild(a);
+                        a.click();
+                    };
+                });
+            </script>
+            """, height=400)
+
             for idx, question in enumerate(QUESTIONS):
                 st.markdown(f"**Q{idx+1}:** {question['question']}")
                 ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
@@ -196,5 +240,9 @@ elif choice == "Professor Panel":
                     file_name="prof_quiz_results.csv",
                     mime="text/csv"
                 )
-        else:
-            st.warning("No results available yet.")
+
+        st.subheader("🎥 Student Webcam Recordings")
+        recordings = [f for f in os.listdir(RECORDINGS_DIR) if f.endswith(".webm")]
+        for vid in recordings:
+            st.markdown(f"**{vid}**")
+            st.video(os.path.join(RECORDINGS_DIR, vid))
