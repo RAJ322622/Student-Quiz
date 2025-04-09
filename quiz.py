@@ -77,7 +77,7 @@ QUESTIONS = [
 ]
 
 # UI Starts
-st.title("🎓 Secure Quiz App with Webcam 📵")
+st.title("🎓 Secure Quiz App with Webcam 🎥")
 
 menu = ["Register", "Login", "Take Quiz", "Change Password", "Professor Panel"]
 choice = st.sidebar.selectbox("Menu", menu)
@@ -107,24 +107,24 @@ elif choice == "Take Quiz":
         username = st.session_state.username
         conn = get_db_connection()
         cur = conn.execute("SELECT attempt_count FROM quiz_attempts WHERE username = ?", (username,))
-        result = cur.fetchone()
-        attempt_count = result[0] if result else 0
+        row = cur.fetchone()
 
-        if attempt_count >= 2:
-            st.warning("You have already attempted the quiz 2 times.")
+        if row and row[0] >= 2:
+            st.error("You have already taken the quiz 2 times.")
         else:
             score = 0
             start_time = time.time()
             answers = {}
 
             # Activate camera at quiz start
-            st.session_state.camera_active = True
-            st.subheader("📷 Camera Monitoring Active During Quiz")
-            webrtc_streamer(
-                key="quiz_camera",
-                mode=WebRtcMode.SENDRECV,
-                media_stream_constraints={"video": True, "audio": False}
-            )
+            if not st.session_state.camera_active:
+                st.session_state.camera_active = True
+                st.subheader("📷 Webcam Monitoring (ON During Quiz Only)")
+                webrtc_streamer(
+                    key="quiz_camera",
+                    mode=WebRtcMode.SENDRECV,
+                    media_stream_constraints={"video": True, "audio": False}
+                )
 
             for idx, question in enumerate(QUESTIONS):
                 st.markdown(f"**Q{idx+1}:** {question['question']}")
@@ -147,13 +147,16 @@ elif choice == "Take Quiz":
                 df[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
                 st.success(f"Quiz submitted! Your score: {score}")
 
-                if result:
+                # Update attempt count
+                if row:
                     conn.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
                 else:
                     conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, 1)", (username,))
                 conn.commit()
+                conn.close()
+
+                # Turn off camera after quiz
                 st.session_state.camera_active = False
-        conn.close()
 
 elif choice == "Change Password":
     if not st.session_state.logged_in:
@@ -199,7 +202,7 @@ elif choice == "Professor Panel":
         if os.path.exists(PROF_CSV_FILE):
             with open(PROF_CSV_FILE, "rb") as file:
                 st.download_button(
-                    label="📅 Download Results CSV",
+                    label="📥 Download Results CSV",
                     data=file,
                     file_name="prof_quiz_results.csv",
                     mime="text/csv"
