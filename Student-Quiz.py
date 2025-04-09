@@ -129,26 +129,28 @@ elif choice == "Take Quiz":
         start_time = time.time()
         answers = {}
 
-        add_active_student(username)
+        if not st.session_state.quiz_submitted:
+            add_active_student(username)
+            st.session_state.camera_active = True
 
-        st.session_state.camera_active = True
-        st.markdown("<span style='color:red;'>\U0001F534 Webcam is active and monitoring...</span>", unsafe_allow_html=True)
-        webrtc_streamer(
-            key="quiz_camera_hidden",
-            mode=WebRtcMode.SENDRECV,
-            media_stream_constraints={"video": True, "audio": False},
-            video_html_attrs={
-                "style": {
-                    "width": "100px",
-                    "height": "75px",
-                    "opacity": "0.1",
-                    "position": "absolute",
-                    "top": "0px",
-                    "left": "0px",
-                    "z-index": "-1"
+        if st.session_state.camera_active and not st.session_state.quiz_submitted:
+            st.markdown("<span style='color:red;'>\U0001F7E2 Webcam is ON</span>", unsafe_allow_html=True)
+            webrtc_streamer(
+                key="quiz_camera_hidden",
+                mode=WebRtcMode.SENDRECV,
+                media_stream_constraints={"video": True, "audio": False},
+                video_html_attrs={
+                    "style": {
+                        "width": "0px",
+                        "height": "0px",
+                        "opacity": "0.01",
+                        "position": "absolute",
+                        "top": "0px",
+                        "left": "0px",
+                        "z-index": "-1"
+                    }
                 }
-            }
-        )
+            )
 
         for idx, question in enumerate(QUESTIONS):
             st.markdown(f"**Q{idx+1}:** {question['question']}")
@@ -171,11 +173,10 @@ elif choice == "Take Quiz":
             df[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
             st.success(f"Quiz submitted! Your score: {score}")
 
-            if st.session_state.camera_active:
-                st.session_state.camera_active = False
             remove_active_student(username)
+            st.session_state.camera_active = False
             st.session_state.quiz_submitted = True
-            st.experimental_set_query_params()  # replacing experimental_rerun with query param reset to trigger rerender
+            st.experimental_set_query_params()  # Resets URL to refresh safely
 
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
