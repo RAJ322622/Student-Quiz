@@ -5,7 +5,6 @@ import time
 import pandas as pd
 import os
 from datetime import datetime
-from streamlit_webrtc import webrtc_streamer, WebRtcMode
 
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
@@ -116,13 +115,8 @@ elif choice == "Take Quiz":
             start_time = time.time()
             answers = {}
 
-            # Always show webcam during quiz
-            st.subheader("📷 Webcam Monitoring (ON During Quiz Only)")
-            webrtc_streamer(
-                key="quiz_camera",
-                mode=WebRtcMode.SENDRECV,
-                media_stream_constraints={"video": True, "audio": False}
-            )
+            st.subheader("📷 Please make sure your webcam is turned ON for monitoring")
+            st.info("Your webcam should be on, and the quiz is being monitored.")
 
             for idx, question in enumerate(QUESTIONS):
                 st.markdown(f"**Q{idx+1}:** {question['question']}")
