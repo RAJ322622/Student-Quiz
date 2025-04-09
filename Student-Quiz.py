@@ -120,27 +120,23 @@ elif choice == "Take Quiz":
             start_time = time.time()
             answers = {}
 
-            st.subheader("📷 Please make sure your webcam is turned ON for monitoring")
-            st.info("Your webcam should be on, and the quiz is being monitored.")
+            st.subheader("📷 Live Camera Monitoring Enabled")
+            st.info("Please ensure your webcam is turned ON. The quiz is being monitored.")
 
             class VideoTransformer(VideoTransformerBase):
                 def transform(self, frame):
                     return frame
 
             try:
-                webrtc_ctx = webrtc_streamer(
-                    key="quiz",
+                webrtc_streamer(
+                    key="quiz_camera",
                     mode=WebRtcMode.SENDONLY,
                     client_settings=ClientSettings(
                         media_stream_constraints={"video": True, "audio": False},
-                        rtc_configuration={
-                            "iceServers": [
-                                {"urls": ["stun:stun.l.google.com:19302"]}
-                            ]
-                        }
+                        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
                     ),
                     video_transformer_factory=VideoTransformer,
-                    async_processing=True,
+                    async_processing=True
                 )
             except Exception as e:
                 st.warning("Webcam connection failed. Please check your browser permissions and network.")
@@ -172,12 +168,6 @@ elif choice == "Take Quiz":
                     conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, 1)")
                 conn.commit()
                 conn.close()
-
-                try:
-                    if 'webrtc_ctx' in locals() and webrtc_ctx and webrtc_ctx.state.playing:
-                        webrtc_ctx.stop()
-                except:
-                    pass
 
 elif choice == "Change Password":
     if not st.session_state.logged_in:
