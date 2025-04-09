@@ -106,11 +106,10 @@ elif choice == "Take Quiz":
         start_time = time.time()
         answers = {}
 
-        # Activate camera at quiz start
+        # Activate camera at quiz start (only camera, no description)
         st.session_state.camera_active = True
-        st.subheader("📷 Camera Monitoring Active During Quiz")
         webrtc_streamer(
-            key="quiz_camera",
+            key="quiz_camera_only",
             mode=WebRtcMode.SENDRECV,
             media_stream_constraints={"video": True, "audio": False}
         )
