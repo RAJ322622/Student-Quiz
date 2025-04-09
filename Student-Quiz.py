@@ -7,6 +7,7 @@ import os
 import json
 from datetime import datetime
 from streamlit_webrtc import webrtc_streamer, WebRtcMode
+from streamlit_autorefresh import st_autorefresh
 
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
@@ -182,7 +183,6 @@ elif choice == "Take Quiz":
             remove_active_student(username)
             st.session_state.camera_active = False
             st.session_state.quiz_submitted = True
-            st.query_params.clear()
 
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
@@ -212,6 +212,7 @@ elif choice == "Professor Monitoring Panel":
     if not st.session_state.prof_verified:
         st.warning("Professor access only. Please login via 'Professor Panel' to verify.")
     else:
+        st_autorefresh(interval=10 * 1000, key="monitor_refresh")
         st.header("\U0001F4E1 Live Student Monitoring")
         st.info("Students currently taking the quiz will appear here.")
         live_stream_ids = get_live_students()
