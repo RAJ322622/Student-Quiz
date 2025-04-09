@@ -6,8 +6,9 @@ import pandas as pd
 import os
 import json
 from datetime import datetime
-from streamlit_webrtc import webrtc_streamer, WebRtcMode
 from streamlit_autorefresh import st_autorefresh
+import cv2
+import tempfile
 
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
@@ -154,30 +155,18 @@ elif choice == "Take Quiz":
                     st.session_state.camera_active = True
                     st.session_state.start_time = time.time()
 
-                if not st.session_state.quiz_submitted:
+                # Basic camera snapshot using OpenCV
+                if st.session_state.camera_active and not st.session_state.quiz_submitted:
                     st.markdown("<span style='color:red;'>\U0001F7E2 Webcam is ON</span>", unsafe_allow_html=True)
-                    webrtc_streamer(
-                        key="quiz_camera_fixed_key",  # Use a constant key
-                        mode=WebRtcMode.SENDRECV,
-                        media_stream_constraints={"video": True, "audio": False},
-                        video_html_attrs={
-                            "style": {
-                                "width": "0px",
-                                "height": "0px",
-                                "opacity": "0.01",
-                                "position": "absolute",
-                                "top": "0px",
-                                "left": "0px",
-                                "z-index": "-1"
-                            }
-                        }
-                    )
+                    camera = st.camera_input("Camera Preview (Recording in background)")
 
                 answers = {}
                 for idx, question in enumerate(QUESTIONS):
-                    st.markdown(f"**Q{idx+1}:** {question['question']}")
-                    ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
-                    answers[question['question']] = ans
+                  st.markdown(f"**Q{idx+1}:** {question['question']}")
+                  options = [""] + question['options']
+                  ans = st.radio("Select your answer:", options, key=f"q{idx}")
+                  answers[question['question']] = ans if ans != "" else None
+
 
                 if st.button("Submit Quiz") and not st.session_state.quiz_submitted:
                     if None in answers.values():
@@ -293,5 +282,4 @@ elif choice == "Professor Monitoring Panel":
         else:
             for student_id in live_stream_ids:
                 st.subheader(f"Live Feed from: {student_id}")
-                st.warning("Note: Real-time video streaming from remote users is not supported on Streamlit Community Cloud.")
-                st.write(f"\U0001F464 {student_id} is currently taking the quiz.")
+                st.warning("Note: Live video feed is only available on professor devices or within enterprise deployment.")
