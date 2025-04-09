@@ -1,2 +1,5 @@
 streamlit
 streamlit-webrtc
+gtts
+pandas
+numpy
