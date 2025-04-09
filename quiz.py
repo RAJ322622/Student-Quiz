@@ -8,7 +8,8 @@ from datetime import datetime
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, VideoProcessorBase
 import av
 
-CSV_FILE = "quiz_results.csv"
+PROF_CSV_FILE = "prof_quiz_results.csv"
+STUDENT_CSV_FILE = "student_quiz_results.csv"
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -108,7 +109,7 @@ elif choice == "Take Quiz":
         start_time = time.time()
         answers = {}
 
-        # Activate camera
+        # Activate camera at quiz start
         st.session_state.camera_active = True
         st.subheader("📷 Camera Monitoring Active During Quiz")
         webrtc_streamer(
@@ -131,11 +132,12 @@ elif choice == "Take Quiz":
             df = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now()]],
                               columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
             try:
-                old_df = pd.read_csv(CSV_FILE)
-                df = pd.concat([old_df, df], ignore_index=True)
+                old_df_prof = pd.read_csv(PROF_CSV_FILE)
+                df = pd.concat([old_df_prof, df], ignore_index=True)
             except FileNotFoundError:
                 pass
-            df.to_csv(CSV_FILE, index=False)
+            df.to_csv(PROF_CSV_FILE, index=False)
+            df[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
             st.success(f"Quiz submitted! Your score: {score}")
 
             # Turn off camera after quiz
@@ -186,12 +188,12 @@ elif choice == "Download Results (Prof Only)":
                 video_processor_factory=VideoProcessor
             )
 
-            if os.path.exists(CSV_FILE):
-                with open(CSV_FILE, "rb") as file:
+            if os.path.exists(PROF_CSV_FILE):
+                with open(PROF_CSV_FILE, "rb") as file:
                     st.download_button(
-                        label="📥 Download Results CSV",
+                        label="📥 Download Results CSV (Professor)",
                         data=file,
-                        file_name="quiz_results.csv",
+                        file_name="prof_quiz_results.csv",
                         mime="text/csv"
                     )
             else:
