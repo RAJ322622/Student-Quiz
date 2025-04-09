@@ -130,84 +130,101 @@ elif choice == "Take Quiz":
     else:
         username = st.session_state.username
 
-        # Check quiz attempts
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT attempt_count FROM quiz_attempts WHERE username = ?", (username,))
-        record = cur.fetchone()
-        attempt_count = record[0] if record else 0
+        usn = st.text_input("Enter your USN")
+        section = st.text_input("Enter your Section (e.g., A, B, C)").upper()
 
-        if attempt_count >= 2:
-            st.error("You have already taken the quiz 2 times. No more attempts allowed.")
-        else:
-            score = 0
-            start_time = time.time()
-            answers = {}
+        if usn and section:
 
-            if not st.session_state.quiz_submitted and not st.session_state.camera_active:
-                add_active_student(username)
-                st.session_state.camera_active = True
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT attempt_count FROM quiz_attempts WHERE username = ?", (username,))
+            record = cur.fetchone()
+            attempt_count = record[0] if record else 0
 
-            if st.session_state.camera_active and not st.session_state.quiz_submitted:
-                st.markdown("<span style='color:red;'>\U0001F7E2 Webcam is ON</span>", unsafe_allow_html=True)
-                webrtc_streamer(
-                    key="quiz_camera_hidden",
-                    mode=WebRtcMode.SENDRECV,
-                    media_stream_constraints={"video": True, "audio": False},
-                    video_html_attrs={
-                        "style": {
-                            "width": "0px",
-                            "height": "0px",
-                            "opacity": "0.01",
-                            "position": "absolute",
-                            "top": "0px",
-                            "left": "0px",
-                            "z-index": "-1"
+            if attempt_count >= 2:
+                st.error("You have already taken the quiz 2 times. No more attempts allowed.")
+            else:
+                score = 0
+                start_time = time.time()
+                answers = {}
+
+                if not st.session_state.quiz_submitted and not st.session_state.camera_active:
+                    add_active_student(username)
+                    st.session_state.camera_active = True
+
+                if st.session_state.camera_active and not st.session_state.quiz_submitted:
+                    st.markdown("<span style='color:red;'>\U0001F7E2 Webcam is ON</span>", unsafe_allow_html=True)
+                    webrtc_streamer(
+                        key="quiz_camera_hidden",
+                        mode=WebRtcMode.SENDRECV,
+                        media_stream_constraints={"video": True, "audio": False},
+                        video_html_attrs={
+                            "style": {
+                                "width": "0px",
+                                "height": "0px",
+                                "opacity": "0.01",
+                                "position": "absolute",
+                                "top": "0px",
+                                "left": "0px",
+                                "z-index": "-1"
+                            }
                         }
-                    }
-                )
-
-            for idx, question in enumerate(QUESTIONS):
-                st.markdown(f"**Q{idx+1}:** {question['question']}")
-                ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
-                answers[question['question']] = ans
-
-            if st.button("Submit Quiz") and not st.session_state.quiz_submitted:
-                if None in answers.values():
-                    st.error("Please answer all questions before submitting the quiz.")
-                else:
-                    for q in QUESTIONS:
-                        if answers.get(q["question"]) == q["answer"]:
-                            score += 1
-                    time_taken = round(time.time() - start_time, 2)
-
-                    new_row = pd.DataFrame([[username, hash_password(username), score, time_taken, datetime.now()]],
-                                           columns=["Username", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
-
-                    try:
-                        old_df_prof = pd.read_csv(PROF_CSV_FILE)
-                        full_df = pd.concat([old_df_prof, new_row], ignore_index=True)
-                    except FileNotFoundError:
-                        full_df = new_row
-                    full_df.to_csv(PROF_CSV_FILE, index=False)
-
-                    new_row[["Username", "Score", "Time_Taken", "Timestamp"]].to_csv(
-                        STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE)
                     )
 
-                    st.success(f"Quiz submitted! Your score: {score}")
+                for idx, question in enumerate(QUESTIONS):
+                    st.markdown(f"**Q{idx+1}:** {question['question']}")
+                    ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
+                    answers[question['question']] = ans
 
-                    if record:
-                        conn.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
+                if st.button("Submit Quiz") and not st.session_state.quiz_submitted:
+                    if None in answers.values():
+                        st.error("Please answer all questions before submitting the quiz.")
                     else:
-                        conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, 1)", (username,))
-                    conn.commit()
+                        for q in QUESTIONS:
+                            if answers.get(q["question"]) == q["answer"]:
+                                score += 1
+                        time_taken = round(time.time() - start_time, 2)
 
-                    remove_active_student(username)
-                    st.session_state.camera_active = False
-                    st.session_state.quiz_submitted = True
+                        timestamp = datetime.now()
+                        new_row = pd.DataFrame([[username, usn, section, hash_password(username), score, time_taken, timestamp]],
+                                               columns=["Username", "USN", "Section", "Hashed_Password", "Score", "Time_Taken", "Timestamp"])
 
-        conn.close()
+                        # Save to prof CSV
+                        try:
+                            old_df_prof = pd.read_csv(PROF_CSV_FILE)
+                            full_df = pd.concat([old_df_prof, new_row], ignore_index=True)
+                        except FileNotFoundError:
+                            full_df = new_row
+                        full_df.to_csv(PROF_CSV_FILE, index=False)
+
+                        # Save to student CSV
+                        new_row[["Username", "USN", "Section", "Score", "Time_Taken", "Timestamp"]].to_csv(
+                            STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE)
+                        )
+
+                        # Save to section-specific file
+                        section_file = f"section_{section}_results.csv"
+                        try:
+                            old_section_df = pd.read_csv(section_file)
+                            updated_section_df = pd.concat([old_section_df, new_row], ignore_index=True)
+                        except FileNotFoundError:
+                            updated_section_df = new_row
+                        updated_section_df.to_csv(section_file, index=False)
+
+                        st.success(f"Quiz submitted! Your score: {score}")
+
+                        if record:
+                            conn.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
+                        else:
+                            conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, 1)", (username,))
+                        conn.commit()
+
+                        remove_active_student(username)
+                        st.session_state.camera_active = False
+                        st.session_state.quiz_submitted = True
+
+            conn.close()
+
 
 elif choice == "Change Password":
     if not st.session_state.logged_in:
