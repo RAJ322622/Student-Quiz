@@ -5,7 +5,7 @@ import time
 import pandas as pd
 import os
 from datetime import datetime
-from streamlit_webrtc import webrtc_streamer, WebRtcMode
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
@@ -18,6 +18,11 @@ if "username" not in st.session_state:
 
 if "camera_active" not in st.session_state:
     st.session_state.camera_active = False
+
+# WebRTC Configuration with public STUN server to help with connectivity
+RTC_CONFIGURATION = RTCConfiguration({
+    "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+})
 
 # Constants for professor credentials
 PROFESSOR_USERNAME = "raj kumar"
@@ -125,7 +130,8 @@ elif choice == "Take Quiz":
             webrtc_streamer(
                 key="quiz_camera",
                 mode=WebRtcMode.SENDRECV,
-                media_stream_constraints={"video": True, "audio": False}
+                media_stream_constraints={"video": True, "audio": False},
+                rtc_configuration=RTC_CONFIGURATION
             )
 
             for idx, question in enumerate(QUESTIONS):
@@ -220,5 +226,6 @@ elif choice == "Video Record (Prof Only)":
             webrtc_streamer(
                 key="prof_video_monitor",
                 mode=WebRtcMode.SENDRECV,
-                media_stream_constraints={"video": True, "audio": False}
+                media_stream_constraints={"video": True, "audio": False},
+                rtc_configuration=RTC_CONFIGURATION
             )
