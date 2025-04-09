@@ -5,8 +5,7 @@ import time
 import pandas as pd
 import os
 from datetime import datetime
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, WebRtcMode, ClientSettings
-import av
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings, VideoTransformerBase
 
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
@@ -81,11 +80,6 @@ QUESTIONS = [
     {"question": "Which loop is used when the number of iterations is known?", "options": ["while", "do-while", "for", "if"], "answer": "for"},
 ]
 
-class VideoTransformer(VideoTransformerBase):
-    def transform(self, frame):
-        img = frame.to_ndarray(format="bgr24")
-        return av.VideoFrame.from_ndarray(img, format="bgr24")
-
 # UI Starts
 st.title("🎓 Secure Quiz App with Webcam 🎥")
 
@@ -129,11 +123,14 @@ elif choice == "Take Quiz":
             st.subheader("📷 Please make sure your webcam is turned ON for monitoring")
             st.info("Your webcam should be on, and the quiz is being monitored.")
 
+            class VideoTransformer(VideoTransformerBase):
+                def transform(self, frame):
+                    return frame
+
             try:
                 webrtc_ctx = webrtc_streamer(
                     key="quiz",
                     mode=WebRtcMode.SENDONLY,
-                    video_transformer_factory=VideoTransformer,
                     client_settings=ClientSettings(
                         media_stream_constraints={"video": True, "audio": False},
                         rtc_configuration={
@@ -142,6 +139,7 @@ elif choice == "Take Quiz":
                             ]
                         }
                     ),
+                    video_transformer_factory=VideoTransformer,
                     async_processing=True,
                 )
             except Exception as e:
