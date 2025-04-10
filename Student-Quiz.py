@@ -131,19 +131,15 @@ QUESTIONS = [
 
 # Webcam snapshot using OpenCV (cv2)
 def capture_snapshot(username):
-    st.info("Please look at the camera. Taking a snapshot in 5 seconds...")
-    cam = cv2.VideoCapture(1)
-    time.sleep(5)
-    ret, frame = cam.read()
+    cap = cv2.VideoCapture(0)
+    ret, frame = cap.read()
     if ret:
-        img_path = os.path.join(RECORDING_DIR, f"{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
-        cv2.imwrite(img_path, frame)
-        st.success("Snapshot captured!")
-        st.image(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)), caption="Your Snapshot", use_column_width=True)
+        filename = os.path.join(RECORDING_DIR, f"{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg")
+        cv2.imwrite(filename, frame)
         st.session_state.snapshot_taken = True
-    else:
-        st.error("Failed to access webcam or capture snapshot.")
-    cam.release()
+        st.success("Snapshot captured successfully.")
+    cap.release()
+
 
 # Streamlit UI
 st.title("\U0001F393 Secure Quiz App with Email Notification")
