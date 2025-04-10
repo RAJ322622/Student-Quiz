@@ -1,3 +1,4 @@
+# Secure Quiz App with Streamlit, OpenCV, Email Notification, and Monitoring
 import streamlit as st
 import sqlite3
 import hashlib
@@ -6,17 +7,21 @@ import pandas as pd
 import os
 import json
 import smtplib
+import cv2
+from PIL import Image
 from email.mime.text import MIMEText
 from datetime import datetime
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, VideoTransformerBase
 from streamlit_autorefresh import st_autorefresh
 
+# Constants
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
 ACTIVE_FILE = "active_students.json"
+RECORDING_DIR = "snapshots"
+os.makedirs(RECORDING_DIR, exist_ok=True)
 
 # Session state defaults
-for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_submitted", "usn", "section"]:
+for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_submitted", "usn", "section", "snapshot_taken"]:
     if key not in st.session_state:
         st.session_state[key] = False if key not in ["username", "usn", "section"] else ""
 
@@ -124,9 +129,24 @@ QUESTIONS = [
     {"question": "Which loop is used when the number of iterations is known?", "options": ["while", "do-while", "for", "if"], "answer": "for"},
 ]
 
-# UI Starts
-st.title("\U0001F393 Secure Quiz App with Email Notification")
+# Webcam snapshot using OpenCV (cv2)
+def capture_snapshot(username):
+    st.info("Please look at the camera. Taking a snapshot in 5 seconds...")
+    cam = cv2.VideoCapture(0)
+    time.sleep(5)
+    ret, frame = cam.read()
+    if ret:
+        img_path = os.path.join(RECORDING_DIR, f"{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+        cv2.imwrite(img_path, frame)
+        st.success("Snapshot captured!")
+        st.image(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)), caption="Your Snapshot", use_column_width=True)
+        st.session_state.snapshot_taken = True
+    else:
+        st.error("Failed to access webcam or capture snapshot.")
+    cam.release()
 
+# Streamlit UI
+st.title("\U0001F393 Secure Quiz App with Email Notification")
 menu = ["Register", "Login", "Take Quiz", "Change Password", "Professor Panel", "Professor Monitoring Panel"]
 choice = st.sidebar.selectbox("Menu", menu)
 
@@ -166,12 +186,15 @@ elif choice == "Take Quiz":
             if attempt_count >= 2:
                 st.error("You have already taken the quiz 2 times. No more attempts allowed.")
             else:
+                if not st.session_state.snapshot_taken:
+                    capture_snapshot(username)
+
                 score = 0
                 if "quiz_start_time" not in st.session_state:
                     st.session_state.quiz_start_time = time.time()
 
                 time_elapsed = int(time.time() - st.session_state.quiz_start_time)
-                time_limit = 25 * 60  # 25 minutes
+                time_limit = 25 * 60
                 time_left = time_limit - time_elapsed
 
                 if time_left <= 0:
@@ -214,27 +237,14 @@ elif choice == "Take Quiz":
                         full_df.to_csv(PROF_CSV_FILE, index=False)
 
                         new_row[["Username", "USN", "Section", "Score", "Time_Taken", "Timestamp"]].to_csv(
-                            STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE)
-                        )
+                            STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE))
 
                         section_csv = f"section_{st.session_state.section}.csv"
                         new_row.to_csv(section_csv, mode='a', index=False, header=not os.path.exists(section_csv))
 
                         st.success(f"Quiz submitted! Your score: {score}")
 
-                        result_body = f"""Hi {username},
-                        
-Your quiz has been submitted successfully!
-
-Score: {score}/{len(QUESTIONS)}
-Time Taken: {time_taken} seconds
-USN: {st.session_state.usn}
-Section: {st.session_state.section}
-Timestamp: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-
-Best regards,
-Quiz Admin
-"""
+                        result_body = f"""Hi {username},\n\nYour quiz has been submitted successfully!\n\nScore: {score}/{len(QUESTIONS)}\nTime Taken: {time_taken} seconds\nUSN: {st.session_state.usn}\nSection: {st.session_state.section}\nTimestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\nBest regards,\nQuiz Admin"""
                         send_email(username, "Your Quiz Result", result_body)
 
                         if record:
