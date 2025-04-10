@@ -104,27 +104,10 @@ QUESTIONS = [
     {"question": "Which loop is used when the number of iterations is known?", "options": ["while", "do-while", "for", "if"], "answer": "for"},
 ]
 
-from streamlit_webrtc import VideoTransformerBase
-import av
-
+# Video processor
 class VideoProcessor(VideoTransformerBase):
-    def __init__(self):
-        self.snapshot_taken = False
-        self.snapshot_path = ""
-
-    def transform(self, frame):
-        img = frame.to_ndarray(format="bgr24")
-        
-        # Take snapshot once and save
-        if not self.snapshot_taken and st.session_state.get("username"):
-            snapshot_filename = f"{st.session_state.username}_{st.session_state.usn}_snapshot.jpg"
-            snapshot_path = os.path.join(RECORDING_DIR, snapshot_filename)
-            cv2.imwrite(snapshot_path, img)
-            self.snapshot_taken = True
-            self.snapshot_path = snapshot_path
-        
-        return av.VideoFrame.from_ndarray(img, format="bgr24")
-
+    def recv(self, frame):
+        return frame
 
 # UI Starts
 st.title("\U0001F393 Secure Quiz App with Webcam \U0001F4F5")
