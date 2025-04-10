@@ -4,10 +4,12 @@ import sqlite3
 import hashlib
 import time
 import pandas as pd
+import numpy as np
 import os
 import json
 import smtplib
 import cv2
+import time
 from PIL import Image
 from email.mime.text import MIMEText
 from datetime import datetime
@@ -130,14 +132,39 @@ QUESTIONS = [
 ]
 
 # Webcam snapshot using OpenCV (cv2)
-def capture_snapshot(username):
-    try:
-        cap = cv2.VideoCapture(0)
+# Start capturing from camera index 0 and 2
+video_capture_0 = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+video_capture_1 = cv2.VideoCapture(2, cv2.CAP_DSHOW)
 
-        if not cap.isOpened():
-            st.error("❌ Unable to access webcam. Please allow camera access or check device connection.")
-            st.session_state.snapshot_taken = False
-            return
+# Start time
+start_time = time.time()
+max_duration = 25 * 60  # 25 minutes in seconds
+
+while True:
+    # Capture frame-by-frame
+    ret0, frame0 = video_capture_0.read()
+    ret1, frame1 = video_capture_1.read()
+
+    if ret0:
+        cv2.imshow('Cam 0', frame0)
+    if ret1:
+        cv2.imshow('Cam 1', frame1)
+
+    # Break the loop on pressing 'q'
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        print("Manual termination triggered.")
+        break
+
+    # Check if 25 minutes have passed
+    if time.time() - start_time > max_duration:
+        print("25 minutes reached. Stopping camera feeds.")
+        break
+
+# Release resources
+video_capture_0.release()
+video_capture_1.release()
+cv2.destroyAllWindows()
+
 
         ret, frame = cap.read()
         if ret:
