@@ -2,5 +2,4 @@ streamlit
 pandas
 streamlit-webrtc
 gTTS
-moviepy
 opencv-python-headless
