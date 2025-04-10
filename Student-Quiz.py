@@ -132,7 +132,7 @@ QUESTIONS = [
 # Webcam snapshot using OpenCV (cv2)
 def capture_snapshot(username):
     st.info("Please look at the camera. Taking a snapshot in 5 seconds...")
-    cam = cv2.VideoCapture(0)
+    cam = cv2.VideoCapture(1)
     time.sleep(5)
     ret, frame = cam.read()
     if ret:
