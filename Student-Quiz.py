@@ -5,16 +5,15 @@ import time
 import pandas as pd
 import os
 import json
+import smtplib
+from email.mime.text import MIMEText
 from datetime import datetime
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, VideoTransformerBase
 from streamlit_autorefresh import st_autorefresh
-import av
 
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
 ACTIVE_FILE = "active_students.json"
-RECORDING_DIR = "recordings"
-os.makedirs(RECORDING_DIR, exist_ok=True)
 
 # Session state defaults
 for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_submitted", "usn", "section"]:
@@ -69,6 +68,27 @@ def get_user_role(username):
     conn.close()
     return role[0] if role else "student"
 
+# Email result function
+def send_email(to_email, subject, body):
+    try:
+        sender_email = "your_email@example.com"
+        sender_password = "your_password"
+        smtp_server = "smtp.gmail.com"
+        smtp_port = 587
+
+        msg = MIMEText(body)
+        msg["Subject"] = subject
+        msg["From"] = sender_email
+        msg["To"] = to_email
+
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(sender_email, sender_password)
+        server.sendmail(sender_email, to_email, msg.as_string())
+        server.quit()
+    except Exception as e:
+        st.error(f"Failed to send email: {e}")
+
 # Active student tracking
 def add_active_student(username):
     try:
@@ -104,25 +124,21 @@ QUESTIONS = [
     {"question": "Which loop is used when the number of iterations is known?", "options": ["while", "do-while", "for", "if"], "answer": "for"},
 ]
 
-# Video processor
-class VideoProcessor(VideoTransformerBase):
-    def recv(self, frame):
-        return frame
-
 # UI Starts
-st.title("\U0001F393 Secure Quiz App with Webcam \U0001F4F5")
-menu = ["Register", "Login", "Take Quiz", "Change Password", "Professor Panel", "Professor Monitoring Panel", "View Recorded Video"]
+st.title("\U0001F393 Secure Quiz App with Email Notification")
+
+menu = ["Register", "Login", "Take Quiz", "Change Password", "Professor Panel", "Professor Monitoring Panel"]
 choice = st.sidebar.selectbox("Menu", menu)
 
 if choice == "Register":
-    username = st.text_input("Username")
+    username = st.text_input("Email (Username)")
     password = st.text_input("Password", type="password")
     role = st.selectbox("Role", ["student"])
     if st.button("Register"):
         register_user(username, password, role)
 
 elif choice == "Login":
-    username = st.text_input("Username")
+    username = st.text_input("Email (Username)")
     password = st.text_input("Password", type="password")
     if st.button("Login"):
         if authenticate_user(username, password):
@@ -167,18 +183,8 @@ elif choice == "Take Quiz":
 
                 answers = {}
 
-                if not st.session_state.quiz_submitted and not st.session_state.camera_active:
+                if not st.session_state.quiz_submitted:
                     add_active_student(username)
-                    st.session_state.camera_active = True
-
-                if st.session_state.camera_active and not st.session_state.quiz_submitted:
-                    st.markdown("<span style='color:red;'>\U0001F7E2 Webcam is ON</span>", unsafe_allow_html=True)
-                    webrtc_streamer(
-                        key="camera",
-                        mode=WebRtcMode.SENDRECV,
-                        media_stream_constraints={"video": True, "audio": False},
-                        video_processor_factory=VideoProcessor,
-                    )
 
                 for idx, question in enumerate(QUESTIONS):
                     st.markdown(f"**Q{idx+1}:** {question['question']}")
@@ -216,6 +222,21 @@ elif choice == "Take Quiz":
 
                         st.success(f"Quiz submitted! Your score: {score}")
 
+                        result_body = f"""Hi {username},
+                        
+Your quiz has been submitted successfully!
+
+Score: {score}/{len(QUESTIONS)}
+Time Taken: {time_taken} seconds
+USN: {st.session_state.usn}
+Section: {st.session_state.section}
+Timestamp: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+Best regards,
+Quiz Admin
+"""
+                        send_email(username, "Your Quiz Result", result_body)
+
                         if record:
                             conn.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
                         else:
@@ -223,12 +244,10 @@ elif choice == "Take Quiz":
                         conn.commit()
 
                         remove_active_student(username)
-                        st.session_state.camera_active = False
                         st.session_state.quiz_submitted = True
                         st.session_state.auto_submit = False
-                        del st.session_state.quiz_start_time  # Clean up
+                        del st.session_state.quiz_start_time
             conn.close()
-
 
 elif choice == "Change Password":
     if not st.session_state.logged_in:
@@ -291,15 +310,5 @@ elif choice == "Professor Monitoring Panel":
             st.write("No active students currently taking the quiz.")
         else:
             for student_id in live_stream_ids:
-                st.subheader(f"Live Feed from: {student_id}")
-                st.warning("Note: Real-time video streaming from remote users is not supported on Streamlit Community Cloud.")
+                st.subheader(f"Live Status: {student_id}")
                 st.write(f"\U0001F464 {student_id} is currently taking the quiz.")
-
-elif choice == "View Recorded Video":
-    st.subheader("Recorded Quiz Videos")
-    video_files = [f for f in os.listdir(RECORDING_DIR) if f.endswith(".mp4")]
-    if video_files:
-        selected_video = st.selectbox("Select a recorded video:", video_files)
-        st.video(os.path.join(RECORDING_DIR, selected_video))
-    else:
-        st.warning("No recorded videos found.")
