@@ -131,17 +131,30 @@ QUESTIONS = [
     {"question": "Which loop is used when the number of iterations is known?", "options": ["while", "do-while", "for", "if"], "answer": "for"},
 ]
 
-def capture_snapshot(username):
-    cap = cv2.VideoCapture(0)  # Use default webcam
-    ret, frame = cap.read()
-    if ret:
-        img_path = os.path.join(RECORDING_DIR, f"{username}_{int(time.time())}.jpg")
-        cv2.imwrite(img_path, frame)
-        st.image(frame, channels="BGR", caption="Snapshot Taken ✅")
+class SnapshotTransformer(VideoTransformerBase):
+    def __init__(self):
+        self.frame = None
+
+    def transform(self, frame):
+        img = frame.to_ndarray(format="bgr24")
+        self.frame = img
+        return img
+
+# Start webcam stream
+ctx = webrtc_streamer(
+    key="snapshot",
+    video_transformer_factory=SnapshotTransformer,
+    async_transform=True
+)
+
+# Take snapshot button
+if ctx.video_transformer and ctx.video_transformer.frame is not None:
+    if st.button("Take Snapshot"):
+        frame = ctx.video_transformer.frame
+        filename = f"{username}_snapshot.jpg"
+        cv2.imwrite(filename, frame)
+        st.success("📸 Snapshot captured successfully!")
         st.session_state.snapshot_taken = True
-    else:
-        st.error("❌ Failed to access webcam or capture image.")
-    cap.release()
 
 # Streamlit UI
 st.title("\U0001F393 Secure Quiz App with Email Notification")
