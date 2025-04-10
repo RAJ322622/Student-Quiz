@@ -142,21 +142,23 @@ class SnapshotTransformer(VideoTransformerBase):
         self.frame = img
         return img
 
-# Start webcam stream
 ctx = webrtc_streamer(
     key="snapshot",
-    video_transformer_factory=SnapshotTransformer,
-    async_transform=True
+    video_processor_factory=SnapshotTransformer,
+    async_processing=True
 )
 
-# Take snapshot button
-if ctx.video_transformer and ctx.video_transformer.frame is not None:
-    if st.button("Take Snapshot"):
+
+if not st.session_state.snapshot_taken:
+    if ctx.video_transformer and ctx.video_transformer.frame is not None:
         frame = ctx.video_transformer.frame
-        filename = f"{username}_snapshot.jpg"
+        filename = os.path.join(RECORDING_DIR, f"{username}_snapshot.jpg")
         cv2.imwrite(filename, frame)
-        st.success("📸 Snapshot captured successfully!")
+        st.success("📸 Snapshot auto-captured.")
         st.session_state.snapshot_taken = True
+    else:
+        st.warning("❌ Failed to access webcam or capture image. Please ensure camera access is enabled.")
+
 
 # Streamlit UI
 st.title("\U0001F393 Secure Quiz App with Email Notification")
