@@ -131,14 +131,30 @@ QUESTIONS = [
 
 # Webcam snapshot using OpenCV (cv2)
 def capture_snapshot(username):
-    cap = cv2.VideoCapture(0)
-    ret, frame = cap.read()
-    if ret:
-        filename = os.path.join(RECORDING_DIR, f"{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg")
-        cv2.imwrite(filename, frame)
-        st.session_state.snapshot_taken = True
-        st.success("Snapshot captured successfully.")
-    cap.release()
+    try:
+        cap = cv2.VideoCapture(0)
+
+        if not cap.isOpened():
+            st.error("❌ Unable to access webcam. Please allow camera access or check device connection.")
+            st.session_state.snapshot_taken = False
+            return
+
+        ret, frame = cap.read()
+        if ret:
+            filename = os.path.join(RECORDING_DIR, f"{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg")
+            cv2.imwrite(filename, frame)
+            st.session_state.snapshot_taken = True
+            st.success("📸 Snapshot captured successfully.")
+        else:
+            st.error("❌ Failed to capture snapshot. Please try again.")
+            st.session_state.snapshot_taken = False
+
+        cap.release()
+
+    except Exception as e:
+        st.error(f"❌ An error occurred while capturing the snapshot: {e}")
+        st.session_state.snapshot_taken = False
+
 
 
 # Streamlit UI
