@@ -192,5 +192,16 @@ if choice == "Take Quiz":
     if not st.session_state.logged_in:
         st.warning("Please login first!")
     else:
-        # Quiz logic continues...
-        pass
+        st.session_state.email = st.text_input("Enter your Email")
+        st.session_state.usn = st.text_input("Enter your USN")
+        st.session_state.section = st.text_input("Enter your Section")
+
+        if st.button("Start Quiz"):
+            if st.session_state.email and st.session_state.usn and st.session_state.section:
+                st.session_state.quiz_submitted = False
+                add_active_student(st.session_state.username)
+                capture_image(st.session_state.username)
+                st.success("Quiz started. Timer set for 25 minutes!")
+                st_autorefresh(interval=1000, limit=1500, key="quiz_timer")  # 25 min = 1500s
+            else:
+                st.warning("Please enter all required details before starting the quiz.")
