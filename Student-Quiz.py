@@ -131,44 +131,17 @@ QUESTIONS = [
     {"question": "Which loop is used when the number of iterations is known?", "options": ["while", "do-while", "for", "if"], "answer": "for"},
 ]
 
-# Webcam snapshot using OpenCV (cv2)
-# Start capturing from camera index 0 and 2
-video_capture_0 = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-video_capture_1 = cv2.VideoCapture(2, cv2.CAP_DSHOW)
-
-# Start time
-start_time = time.time()
-max_duration = 25 * 60  # 25 minutes in seconds
-
-while True:
-    # Capture frame-by-frame
-    ret0, frame0 = video_capture_0.read()
-    ret1, frame1 = video_capture_1.read()
-
-    if ret0:
-        cv2.imshow('Cam 0', frame0)
-    if ret1:
-        cv2.imshow('Cam 1', frame1)
-
-    # Break the loop on pressing 'q'
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        print("Manual termination triggered.")
-        break
-
-    # Check if 25 minutes have passed
-    if time.time() - start_time > max_duration:
-        print("25 minutes reached. Stopping camera feeds.")
-        break
-
-# Release resources
-video_capture_0.release()
-video_capture_1.release()
-cv2.destroyAllWindows()
-
-
-        
-
-
+def capture_snapshot(username):
+    cap = cv2.VideoCapture(0)  # Use default webcam
+    ret, frame = cap.read()
+    if ret:
+        img_path = os.path.join(RECORDING_DIR, f"{username}_{int(time.time())}.jpg")
+        cv2.imwrite(img_path, frame)
+        st.image(frame, channels="BGR", caption="Snapshot Taken ✅")
+        st.session_state.snapshot_taken = True
+    else:
+        st.error("❌ Failed to access webcam or capture image.")
+    cap.release()
 
 # Streamlit UI
 st.title("\U0001F393 Secure Quiz App with Email Notification")
@@ -196,6 +169,9 @@ elif choice == "Take Quiz":
         st.warning("Please login first!")
     else:
         username = st.session_state.username
+        # Capture webcam snapshot only once
+        if not st.session_state.snapshot_taken:
+            capture_snapshot(username)
         usn = st.text_input("Enter your USN")
         section = st.text_input("Enter your Section")
         st.session_state.usn = usn.strip().upper()
