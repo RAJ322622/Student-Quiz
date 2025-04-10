@@ -1,6 +1,6 @@
 streamlit
-streamlit-webrtc
-streamlit-autorefresh
-gtts
 pandas
-numpy
+streamlit-webrtc
+gTTS
+moviepy
+opencv-python-headless
