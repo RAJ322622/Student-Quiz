@@ -14,6 +14,8 @@ from PIL import Image
 from email.mime.text import MIMEText
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+
 
 # Constants
 PROF_CSV_FILE = "prof_quiz_results.csv"
