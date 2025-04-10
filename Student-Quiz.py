@@ -166,21 +166,7 @@ video_capture_1.release()
 cv2.destroyAllWindows()
 
 
-        ret, frame = cap.read()
-        if ret:
-            filename = os.path.join(RECORDING_DIR, f"{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg")
-            cv2.imwrite(filename, frame)
-            st.session_state.snapshot_taken = True
-            st.success("📸 Snapshot captured successfully.")
-        else:
-            st.error("❌ Failed to capture snapshot. Please try again.")
-            st.session_state.snapshot_taken = False
-
-        cap.release()
-
-    except Exception as e:
-        st.error(f"❌ An error occurred while capturing the snapshot: {e}")
-        st.session_state.snapshot_taken = False
+        
 
 
 
