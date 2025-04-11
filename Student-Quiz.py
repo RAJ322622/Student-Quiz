@@ -12,24 +12,23 @@ import av
 import smtplib
 from email.message import EmailMessage
 import random
-EMAIL_SENDER = "your_email@gmail.com"
-EMAIL_PASSWORD = "your_email_app_password"  # Use App Password (not your Gmail password)
 
-
-def send_email(recipient, subject, content):
+def send_email_otp(to_email, otp):
     try:
         msg = EmailMessage()
-        msg.set_content(content)
-        msg["Subject"] = subject
-        msg["From"] = EMAIL_SENDER
-        msg["To"] = recipient
+        msg.set_content(f"Your OTP for Secure Quiz App is: {otp}")
+        msg['Subject'] = "Email Verification OTP - Secure Quiz App"
+        msg['From'] = "youremail@example.com"  # Your email
+        msg['To'] = to_email
 
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-            smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
-            smtp.send_message(msg)
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login("youremail@example.com", "your_app_password")  # Use App Password
+        server.send_message(msg)
+        server.quit()
         return True
     except Exception as e:
-        print("Email error:", e)
+        st.error(f"Failed to send OTP: {e}")
         return False
 
 
@@ -134,35 +133,43 @@ class VideoProcessor(VideoTransformerBase):
 
 # UI Starts
 st.title("\U0001F393 Secure Quiz App with Webcam \U0001F4F5")
-menu = ["Register", "Login", "Forgot Password", "Take Quiz", "Change Password", "Professor Panel", "Professor Monitoring Panel", "View Recorded Video"]
+menu = ["Register", "Login", "Take Quiz", "Change Password", "Professor Panel", "Professor Monitoring Panel", "View Recorded Video"]
 choice = st.sidebar.selectbox("Menu", menu)
 
 if choice == "Register":
     username = st.text_input("Username")
-    email = st.text_input("Gmail Address")
+    email = st.text_input("Email")
     password = st.text_input("Password", type="password")
     role = st.selectbox("Role", ["student"])
 
-    if st.button("Register"):
-        if not email.endswith("@gmail.com"):
-            st.error("Please enter a valid Gmail address.")
-        else:
+    if st.button("Send OTP"):
+        if username and email and password:
+            otp = str(random.randint(100000, 999999))
+            if send_email_otp(email, otp):
+                st.session_state['reg_otp'] = otp
+                st.session_state['reg_data'] = (username, hash_password(password), role, email)
+                st.success("OTP sent to your email.")
+    
+    otp_entered = st.text_input("Enter OTP")
+    if st.button("Verify and Register"):
+        if otp_entered == st.session_state.get('reg_otp'):
+            username, password_hashed, role, email = st.session_state['reg_data']
             conn = get_db_connection()
+            conn.execute('ALTER TABLE users ADD COLUMN email TEXT')  # Do this once
             try:
-                conn.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                             (username, hash_password(password), role))
+                conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
+                             (username, password_hashed, role, email))
                 conn.commit()
-                content = f"Hello {username},\n\nYou have successfully registered for the Secure Quiz App!"
-                if send_email(email, "Registration Successful", content):
-                    st.success("Registration successful! Confirmation mail sent. Please login.")
-                else:
-                    st.warning("Registered, but failed to send confirmation email.")
+                st.success("Registration successful! Please login.")
             except sqlite3.IntegrityError:
-                st.error("Username already exists!")
+                st.error("Username or Email already exists!")
             conn.close()
+        else:
+            st.error("Incorrect OTP!")
 
 
 elif choice == "Login":
+    st.subheader("Login")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
     if st.button("Login"):
@@ -170,39 +177,35 @@ elif choice == "Login":
             st.session_state.logged_in = True
             st.session_state.username = username
             st.success("Login successful!")
-elif choice == "Forgot Password":
-    st.subheader("Reset Password via Email")
-    user = st.text_input("Enter your username")
-    email = st.text_input("Enter your registered Gmail")
 
-    if st.button("Send Reset Code"):
-        if not email.endswith("@gmail.com"):
-            st.error("Please enter a valid Gmail address.")
+    st.markdown("### Forgot Password?")
+    forgot_email = st.text_input("Enter registered email")
+    if st.button("Send Reset OTP"):
+        conn = get_db_connection()
+        user = conn.execute("SELECT username FROM users WHERE email = ?", (forgot_email,)).fetchone()
+        conn.close()
+        if user:
+            otp = str(random.randint(100000, 999999))
+            st.session_state['reset_email'] = forgot_email
+            st.session_state['reset_otp'] = otp
+            st.session_state['reset_user'] = user[0]
+            if send_email_otp(forgot_email, otp):
+                st.success("OTP sent to your email.")
         else:
-            reset_code = str(random.randint(100000, 999999))
-            st.session_state["reset_code"] = reset_code
-            st.session_state["reset_user"] = user
-            sent = send_email(email, "Your Quiz App Password Reset Code", f"Your reset code is: {reset_code}")
-            if sent:
-                st.success("Reset code sent to your Gmail.")
-            else:
-                st.error("Failed to send email. Check email address or try later.")
+            st.error("Email not registered.")
 
-    if "reset_code" in st.session_state:
-        entered_code = st.text_input("Enter the code sent to your email")
-        new_password = st.text_input("Enter your new password", type="password")
-        if st.button("Reset Password"):
-            if entered_code == st.session_state["reset_code"]:
-                conn = get_db_connection()
-                conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                             (hash_password(new_password), st.session_state["reset_user"]))
-                conn.commit()
-                conn.close()
-                st.success("Password reset successful. Please login.")
-                del st.session_state["reset_code"]
-                del st.session_state["reset_user"]
-            else:
-                st.error("Incorrect reset code. Please try again.")
+    reset_otp_input = st.text_input("Enter OTP to reset password")
+    new_password = st.text_input("New Password", type="password")
+    if st.button("Reset Password"):
+        if reset_otp_input == st.session_state.get('reset_otp'):
+            conn = get_db_connection()
+            conn.execute("UPDATE users SET password = ? WHERE username = ?",
+                         (hash_password(new_password), st.session_state['reset_user']))
+            conn.commit()
+            conn.close()
+            st.success("Password reset successfully!")
+        else:
+            st.error("Incorrect OTP.")
 
 
 elif choice == "Take Quiz":
