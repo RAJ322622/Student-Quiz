@@ -170,7 +170,7 @@ if choice == "Register":
     password = st.text_input("Password", type="password")
     role = st.selectbox("Role", ["student"])
 
-    elif menu == "Forgot Password":
+elif menu == "Forgot Password":
     st.subheader("Forgot Password")
     username = st.text_input("Enter your registered username")
     email = st.text_input("Enter your registered Gmail")
