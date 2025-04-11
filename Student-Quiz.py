@@ -170,13 +170,48 @@ if choice == "Register":
     password = st.text_input("Password", type="password")
     role = st.selectbox("Role", ["student"])
 
+    elif menu == "Forgot Password":
+    st.subheader("Forgot Password")
+    username = st.text_input("Enter your registered username")
+    email = st.text_input("Enter your registered Gmail")
+
     if st.button("Send OTP"):
-        if username and email and password:
-            otp = str(random.randint(100000, 999999))
-            if send_email_otp(email, otp):
-                st.session_state['reg_otp'] = otp
-                st.session_state['reg_data'] = (username, hash_password(password), role, email)
-                st.success("OTP sent to your email.")
+        cursor.execute('SELECT * FROM users WHERE username = ? AND email = ?', (username, email))
+        if cursor.fetchone():
+            otp = random.randint(100000, 999999)
+            st.session_state['reset_otp'] = otp
+            st.session_state['reset_user'] = username
+            st.session_state['reset_email'] = email
+            send_otp(email, otp)
+            st.success("OTP sent to your email. Please check and enter it below.")
+        else:
+            st.error("Username and email do not match.")
+
+    if 'reset_otp' in st.session_state:
+        entered_otp = st.text_input("Enter OTP sent to your email")
+        if st.button("Verify OTP"):
+            if entered_otp == str(st.session_state['reset_otp']):
+                st.success("OTP verified! Please enter new password.")
+                new_pass = st.text_input("New Password", type="password")
+                confirm_pass = st.text_input("Confirm Password", type="password")
+
+                if st.button("Reset Password"):
+                    if new_pass != confirm_pass:
+                        st.error("Passwords do not match.")
+                    elif not re.match(r'^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&]).{8,}$', new_pass):
+                        st.warning("Password must be at least 8 characters, include a number and a special character.")
+                    else:
+                        hashed = hash_password(new_pass)
+                        cursor.execute('UPDATE users SET password = ? WHERE username = ?', (hashed, st.session_state['reset_user']))
+                        conn.commit()
+                        st.success("Password reset successful. Please login with your new password.")
+                        # Clear session
+                        st.session_state.pop('reset_otp', None)
+                        st.session_state.pop('reset_user', None)
+                        st.session_state.pop('reset_email', None)
+            else:
+                st.error("Incorrect OTP.")
+
     
     otp_entered = st.text_input("Enter OTP")
     if st.button("Verify and Register"):
