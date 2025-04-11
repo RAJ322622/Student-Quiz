@@ -291,7 +291,7 @@ elif choice == "Professor Monitoring Panel":
         live_stream_ids = get_live_students()
         st.markdown("### 🎥 Live Proctoring Link")
 
-        default_link = "https://meet.google.com/your-meet-code"
+        default_link = "https://meet.google.com/kox-bhvq-knp"
         proctor_link = st.text_input("Paste your Google Meet / Zoom / Jitsi link here", default_link)
 
         st.success(f"✅ Share this link with students: [Join Meet]({proctor_link})")
