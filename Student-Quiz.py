@@ -16,6 +16,7 @@ ACTIVE_FILE = "active_students.json"
 RECORDING_DIR = "recordings"
 os.makedirs(RECORDING_DIR, exist_ok=True)
 
+
 # Session state defaults
 for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_submitted", "usn", "section"]:
     if key not in st.session_state:
@@ -106,8 +107,25 @@ QUESTIONS = [
 
 # Video processor
 class VideoProcessor(VideoTransformerBase):
+    def __init__(self):
+        self.writer = None
+        self.filename = f"{RECORDING_DIR}/{st.session_state.username}_{int(time.time())}.mp4"
+        self.frame_width = 640
+        self.frame_height = 480
+        self.fps = 15
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        self.writer = cv2.VideoWriter(self.filename, fourcc, self.fps, (self.frame_width, self.frame_height))
+
     def recv(self, frame):
-        return frame
+        img = frame.to_ndarray(format="bgr24")
+        if self.writer:
+            self.writer.write(img)
+        return av.VideoFrame.from_ndarray(img, format="bgr24")
+
+    def __del__(self):
+        if self.writer:
+            self.writer.release()
+
 
 # UI Starts
 st.title("\U0001F393 Secure Quiz App with Webcam \U0001F4F5")
@@ -178,6 +196,8 @@ elif choice == "Take Quiz":
                         mode=WebRtcMode.SENDRECV,
                         media_stream_constraints={"video": True, "audio": False},
                         video_processor_factory=VideoProcessor,
+
+
                     )
 
                 for idx, question in enumerate(QUESTIONS):
