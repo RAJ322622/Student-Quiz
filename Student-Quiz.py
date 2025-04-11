@@ -6,7 +6,6 @@ import datetime
 import time
 import cv2
 from gtts import gTTS
-from moviepy.editor import *
 import os
 import uuid
 import base64
