@@ -44,32 +44,38 @@ for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_sub
     if key not in st.session_state:
         st.session_state[key] = False if key not in ["username", "usn", "section"] else ""
 
+
 def get_db_connection():
     conn = sqlite3.connect('quiz_app.db')
-    
-    # Create tables if not exist
+
+    # Create 'users' table if it doesn't exist
     conn.execute('''CREATE TABLE IF NOT EXISTS users (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         username TEXT UNIQUE,
                         password TEXT,
                         role TEXT DEFAULT 'student')''')
 
-    # ✅ Check and add 'email' column if it doesn't exist
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(users)")
-    columns = [column[1] for column in cursor.fetchall()]
-    if 'email' not in columns:
-        conn.execute('ALTER TABLE users ADD COLUMN email TEXT')
-        conn.commit()
+    # ✅ Try to add 'email' column only if it doesn't exist
+    try:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(users)")
+        columns = [column[1] for column in cursor.fetchall()]
+        if 'email' not in columns:
+            conn.execute('ALTER TABLE users ADD COLUMN email TEXT')
+            conn.commit()
+    except Exception as e:
+        print(f"Error checking/adding email column: {e}")
 
+    # Create other tables
     conn.execute('''CREATE TABLE IF NOT EXISTS password_changes (
                         username TEXT PRIMARY KEY,
                         change_count INTEGER DEFAULT 0)''')
     conn.execute('''CREATE TABLE IF NOT EXISTS quiz_attempts (
                         username TEXT PRIMARY KEY,
                         attempt_count INTEGER DEFAULT 0)''')
-    
+
     return conn
+
 
 def add_email_column_if_not_exists():
     conn = get_db_connection()
