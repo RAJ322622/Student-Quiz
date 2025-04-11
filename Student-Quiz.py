@@ -164,28 +164,95 @@ st.title("\U0001F393 Secure Quiz App with Webcam \U0001F4F5")
 menu = ["Register", "Login", "Take Quiz", "Change Password", "Professor Panel", "Professor Monitoring Panel", "View Recorded Video"]
 choice = st.sidebar.selectbox("Menu", menu)
 
-if choice == "Register":
+elif choice == "Register":
+    st.subheader("Register")
     username = st.text_input("Username")
-    email = st.text_input("Email")
+    email = st.text_input("Gmail (for OTP verification)")
     password = st.text_input("Password", type="password")
     role = st.selectbox("Role", ["student"])
-
-elif menu == "Forgot Password":
-    st.subheader("Forgot Password")
-    username = st.text_input("Enter your registered username")
-    email = st.text_input("Enter your registered Gmail")
-
+    
     if st.button("Send OTP"):
-        cursor.execute('SELECT * FROM users WHERE username = ? AND email = ?', (username, email))
-        if cursor.fetchone():
-            otp = random.randint(100000, 999999)
-            st.session_state['reset_otp'] = otp
-            st.session_state['reset_user'] = username
-            st.session_state['reset_email'] = email
-            send_otp(email, otp)
-            st.success("OTP sent to your email. Please check and enter it below.")
+        if not username or not email or not password:
+            st.warning("Please fill all fields.")
         else:
-            st.error("Username and email do not match.")
+            reg_otp = str(random.randint(100000, 999999))
+            st.session_state['reg_otp'] = reg_otp
+            st.session_state['reg_data'] = (username, hash_password(password), role, email)
+            if send_email_otp(email, reg_otp):
+                st.success("OTP sent to your email. Please check and verify below.")
+
+    if 'reg_otp' in st.session_state:
+        entered_otp = st.text_input("Enter OTP to verify and register")
+        if st.button("Verify and Register"):
+            if entered_otp == st.session_state.get('reg_otp'):
+                username, password_hashed, role, email = st.session_state['reg_data']
+                conn = get_db_connection()
+                try:
+                    conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
+                                 (username, password_hashed, role, email))
+                    conn.commit()
+                    st.success("✅ Registration successful! Please login.")
+                except sqlite3.IntegrityError:
+                    st.error("Username or Email already exists!")
+                conn.close()
+                st.session_state.pop('reg_otp', None)
+                st.session_state.pop('reg_data', None)
+            else:
+                st.error("Incorrect OTP.")
+
+
+elif choice == "Login":
+    st.subheader("Login")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    login_btn = st.button("Login")
+
+    if login_btn:
+        if authenticate_user(username, password):
+            st.session_state.logged_in = True
+            st.session_state.username = username
+            st.success("✅ Login successful!")
+
+    st.markdown("---")
+    st.markdown("### 🔐 Forgot Password?")
+    forgot_email = st.text_input("Enter your registered Gmail")
+    
+    if st.button("Send Reset OTP"):
+        conn = get_db_connection()
+        user = conn.execute("SELECT username FROM users WHERE email = ?", (forgot_email,)).fetchone()
+        conn.close()
+        if user:
+            otp = str(random.randint(100000, 999999))
+            st.session_state['reset_email'] = forgot_email
+            st.session_state['reset_otp'] = otp
+            st.session_state['reset_user'] = user[0]
+            if send_email_otp(forgot_email, otp):
+                st.success("OTP sent to your email.")
+        else:
+            st.error("Email not registered.")
+
+    if 'reset_otp' in st.session_state:
+        reset_otp_input = st.text_input("Enter OTP to reset password")
+        new_password = st.text_input("New Password", type="password")
+        confirm_password = st.text_input("Confirm Password", type="password")
+        if st.button("Reset Password"):
+            if reset_otp_input != st.session_state.get('reset_otp'):
+                st.error("Incorrect OTP.")
+            elif new_password != confirm_password:
+                st.error("Passwords do not match.")
+            elif len(new_password) < 6:
+                st.warning("Password should be at least 6 characters.")
+            else:
+                conn = get_db_connection()
+                conn.execute("UPDATE users SET password = ? WHERE username = ?",
+                             (hash_password(new_password), st.session_state['reset_user']))
+                conn.commit()
+                conn.close()
+                st.success("✅ Password reset successfully!")
+                # Clear session keys
+                for key in ['reset_email', 'reset_otp', 'reset_user']:
+                    st.session_state.pop(key, None)
+
 
     if 'reset_otp' in st.session_state:
         entered_otp = st.text_input("Enter OTP sent to your email")
