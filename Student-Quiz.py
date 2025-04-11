@@ -101,7 +101,9 @@ def register_user(username, password, role):
         st.success("Registration successful! Please login.")
     except sqlite3.IntegrityError:
         st.error("Username already exists!")
-    conn.close()
+    finally:
+        conn.close()
+
 
 # Authenticate user
 def authenticate_user(username, password):
