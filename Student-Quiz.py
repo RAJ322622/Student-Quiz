@@ -164,7 +164,7 @@ st.title("\U0001F393 Secure Quiz App with Webcam \U0001F4F5")
 menu = ["Register", "Login", "Take Quiz", "Change Password", "Professor Panel", "Professor Monitoring Panel", "View Recorded Video"]
 choice = st.sidebar.selectbox("Menu", menu)
 
-elif choice == "Register":
+if choice == "Register":
     st.subheader("Register")
     username = st.text_input("Username")
     email = st.text_input("Gmail (for OTP verification)")
