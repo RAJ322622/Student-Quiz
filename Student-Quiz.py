@@ -18,18 +18,19 @@ def send_email_otp(to_email, otp):
         msg = EmailMessage()
         msg.set_content(f"Your OTP for Secure Quiz App is: {otp}")
         msg['Subject'] = "Email Verification OTP - Secure Quiz App"
-        msg['From'] = "rajkumar.k0322@gmail.com"  # Your email
+        msg['From'] = "rajkumar.k0322@gmail.com"
         msg['To'] = to_email
 
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
-        server.login("rajkumar.k0322@gmail.com", "khwb ioiy cfyt jurh")  # Use App Password
+        server.login("rajkumar.k0322@gmail.com", "khwb ioiy cfyt jurh")  # App Password
         server.send_message(msg)
         server.quit()
         return True
     except Exception as e:
         st.error(f"Failed to send OTP: {e}")
         return False
+
 
 
 PROF_CSV_FILE = "prof_quiz_results.csv"
@@ -57,7 +58,19 @@ def get_db_connection():
     conn.execute('''CREATE TABLE IF NOT EXISTS quiz_attempts (
                         username TEXT PRIMARY KEY,
                         attempt_count INTEGER DEFAULT 0)''')
+    conn.execute('ALTER TABLE users ADD COLUMN email TEXT')  # Do this once
+
     return conn
+def add_email_column_if_not_exists():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [column[1] for column in cursor.fetchall()]
+    if "email" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        conn.commit()
+    conn.close()
+
 
 # Password hashing
 def hash_password(password):
