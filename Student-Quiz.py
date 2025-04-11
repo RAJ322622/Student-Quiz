@@ -223,7 +223,8 @@ elif choice == "Login":
     forgot_email = st.text_input("Enter registered email")
     if st.button("Send Reset OTP"):
         conn = get_db_connection()
-        user = conn.execute("SELECT username FROM users WHERE email = ?", (forgot_email,)).fetchone()
+        user = conn.execute("UPDATE users SET password = ? WHERE username = ?", 
+             (hash_password(new_password), username))
         conn.close()
         if user:
             otp = str(random.randint(100000, 999999))
