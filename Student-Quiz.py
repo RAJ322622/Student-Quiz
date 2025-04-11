@@ -224,6 +224,8 @@ entered_otp = st.text_input("Enter OTP to reset password", key="reset_otp_input"
 new_password = st.text_input("New Password", type="password", key="reset_new_password")
 
 if 'reset_otp' in st.session_state and 'reset_email' in st.session_state:
+    st.markdown("### Reset Password")
+
     entered_otp = st.text_input("Enter OTP to reset password", key="reset_otp_input")
     new_password = st.text_input("New Password", type="password", key="reset_new_password")
 
@@ -242,6 +244,7 @@ if 'reset_otp' in st.session_state and 'reset_email' in st.session_state:
             del st.session_state['reset_user']
         else:
             st.error("Invalid OTP. Please check your email and try again.")
+
 
 
 # ✅ OTP input and password reset (AFTER sending OTP)
