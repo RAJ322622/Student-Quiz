@@ -18,12 +18,12 @@ def send_email_otp(to_email, otp):
         msg = EmailMessage()
         msg.set_content(f"Your OTP for Secure Quiz App is: {otp}")
         msg['Subject'] = "Email Verification OTP - Secure Quiz App"
-        msg['From'] = "youremail@example.com"  # Your email
+        msg['From'] = "rajkumar.k0322@gmail.com"  # Your email
         msg['To'] = to_email
 
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
-        server.login("rajkumar.b6303@gmail.com", "Streamlit_Quiz@")  # Use App Password
+        server.login("rajkumar.k0322@gmail.com", "khwb ioiy cfyt jurh")  # Use App Password
         server.send_message(msg)
         server.quit()
         return True
