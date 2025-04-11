@@ -61,7 +61,6 @@ def get_db_connection():
         cursor.execute("PRAGMA table_info(users)")
         columns = [column[1] for column in cursor.fetchall()]
         if 'email' not in columns:
-            conn.execute('ALTER TABLE users ADD COLUMN email TEXT')
             conn.commit()
     except Exception as e:
         print(f"Error checking/adding email column: {e}")
@@ -184,15 +183,15 @@ if choice == "Register":
         if otp_entered == st.session_state.get('reg_otp'):
             username, password_hashed, role, email = st.session_state['reg_data']
             conn = get_db_connection()
-            conn.execute('ALTER TABLE users ADD COLUMN email TEXT')  # Do this once
             try:
                 conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
-                             (username, password_hashed, role, email))
+                         (username, password_hashed, role, email))
                 conn.commit()
                 st.success("Registration successful! Please login.")
             except sqlite3.IntegrityError:
                 st.error("Username or Email already exists!")
             conn.close()
+
         else:
             st.error("Incorrect OTP!")
 
