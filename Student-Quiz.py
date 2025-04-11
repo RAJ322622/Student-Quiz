@@ -335,18 +335,36 @@ elif choice == "Take Quiz":
 
                         st.success(f"Quiz submitted! Your score: {score}")
 
-                        if record:
+                                                if record:
                             conn.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
                         else:
-                            conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, 1)", (username,))
+                            conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, ?)", (username, 1))
                         conn.commit()
+                        conn.close()
 
-                        remove_active_student(username)
-                        st.session_state.camera_active = False
+                        # Email score to student
+                        email = conn.execute("SELECT email FROM users WHERE username = ?", (username,)).fetchone()
+                        if email and email[0]:
+                            try:
+                                msg = EmailMessage()
+                                msg.set_content(f"Hi {username},\n\nYour quiz has been successfully submitted.\nScore: {score}/{len(QUESTIONS)}\nTime Taken: {time_taken} seconds\n\nBest of luck!")
+                                msg['Subject'] = "Secure Quiz App - Your Quiz Result"
+                                msg['From'] = "rajkumar.k0322@gmail.com"
+                                msg['To'] = email[0]
+
+                                server = smtplib.SMTP('smtp.gmail.com', 587)
+                                server.starttls()
+                                server.login("rajkumar.k0322@gmail.com", "khwb ioiy cfyt jurh")
+                                server.send_message(msg)
+                                server.quit()
+                            except Exception as e:
+                                st.warning(f"Quiz submitted, but failed to send email: {e}")
+
+                        # Reset state
                         st.session_state.quiz_submitted = True
-                        st.session_state.auto_submit = False
-                        del st.session_state.quiz_start_time  # Clean up
-            conn.close()
+                        st.session_state.camera_active = False
+                        remove_active_student(username)
+
 
 
 elif choice == "Change Password":
