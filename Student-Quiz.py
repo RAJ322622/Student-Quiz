@@ -22,7 +22,7 @@ os.makedirs(RECORDING_DIR, exist_ok=True)
 # Email API details (you can use services like EmailAPI.io or Mailjet)
 EMAIL_API_URL = "https://api.emailapi.io/v1/send"  # replace with real API
 EMAIL_API_KEY = "your_api_key_here"  # replace with real API key
-SENDER_EMAIL = "youremail@example.com"  # replace with your verified email
+SENDER_EMAIL = "rajkumar.b6303@gmail.com"  # replace with your verified email
 
 # Email sender
 def send_email(to, subject, message):
