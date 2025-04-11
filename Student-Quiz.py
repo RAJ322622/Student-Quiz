@@ -153,6 +153,9 @@ elif choice == "Take Quiz":
                 score = 0
                 if "quiz_start_time" not in st.session_state:
                     st.session_state.quiz_start_time = time.time()
+                    meet_link = "https://meet.google.com/kox-bhvq-knp"  # replace with your actual link
+                    js = f"window.open('{meet_link}')"  # JavaScript to open link in new tab
+                    st.components.v1.html(f"<script>{js}</script>", height=0)
 
                 time_elapsed = int(time.time() - st.session_state.quiz_start_time)
                 time_limit = 25 * 60  # 25 minutes
@@ -229,7 +232,6 @@ elif choice == "Take Quiz":
                         del st.session_state.quiz_start_time  # Clean up
             conn.close()
 
-
 elif choice == "Change Password":
     if not st.session_state.logged_in:
         st.warning("Please login first!")
@@ -287,6 +289,13 @@ elif choice == "Professor Monitoring Panel":
         st.header("\U0001F4E1 Live Student Monitoring")
         st.info("Students currently taking the quiz will appear here.")
         live_stream_ids = get_live_students()
+        st.markdown("### 🎥 Live Proctoring Link")
+
+        default_link = "https://meet.google.com/your-meet-code"
+        proctor_link = st.text_input("Paste your Google Meet / Zoom / Jitsi link here", default_link)
+
+        st.success(f"✅ Share this link with students: [Join Meet]({proctor_link})")
+
         if not live_stream_ids:
             st.write("No active students currently taking the quiz.")
         else:
