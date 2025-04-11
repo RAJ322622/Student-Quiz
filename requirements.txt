@@ -1,7 +1,7 @@
 streamlit
 pandas
 streamlit-webrtc
-streamlit_autorefresh 
+streamlit_autorefresh
 gTTS
 opencv-python-headless
-moviepy.editor
+moviepy
