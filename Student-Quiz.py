@@ -179,6 +179,117 @@ elif choice == "Login":
             reset_password(username)
         else:
             st.warning("Enter your username to reset password.")
+# Add this after the Login block in your code:
+
+elif choice == "Take Quiz" and st.session_state.logged_in:
+    st.subheader("Take Quiz")
+
+    if not st.session_state.quiz_submitted:
+        st.session_state.usn = st.text_input("Enter your USN:")
+        st.session_state.section = st.text_input("Enter your Section:")
+        st_autorefresh(interval=1000 * 60, limit=25, key="quiz_refresh")  # 25-minute auto-refresh
+
+        webrtc_streamer(key="camera", mode=WebRtcMode.SENDONLY, video_processor_factory=VideoProcessor)
+        st.session_state.camera_active = True
+
+        conn = get_db_connection()
+        cur = conn.execute("SELECT attempt_count FROM quiz_attempts WHERE username = ?", (st.session_state.username,))
+        row = cur.fetchone()
+        attempt_count = row[0] if row else 0
+
+        if attempt_count >= 2:
+            st.warning("You have exceeded the allowed number of quiz attempts.")
+        else:
+            answers = {}
+            for i, q in enumerate(QUESTIONS):
+                st.write(f"Q{i+1}. {q['question']}")
+                answers[i] = st.radio(f"Select Answer for Q{i+1}", q["options"], key=f"q{i}")
+
+            if st.button("Submit Quiz"):
+                score = sum(1 for i, q in enumerate(QUESTIONS) if answers.get(i) == q["answer"])
+                result_data = {
+                    "Username": st.session_state.username,
+                    "USN": st.session_state.usn,
+                    "Section": st.session_state.section,
+                    "Score": score,
+                    "Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+                filename = f"{st.session_state.section}_results.csv"
+                file_exists = os.path.isfile(filename)
+                with open(filename, "a") as f:
+                    if not file_exists:
+                        f.write("Username,USN,Section,Score,Date\n")
+                    f.write(",".join(map(str, result_data.values())) + "\n")
+
+                conn.execute("INSERT OR REPLACE INTO quiz_attempts (username, attempt_count) VALUES (?, ?)",
+                             (st.session_state.username, attempt_count + 1))
+                conn.commit()
+                st.success(f"Quiz submitted! Score: {score}/" + str(len(QUESTIONS)))
+                st.session_state.quiz_submitted = True
+                st.session_state.camera_active = False
+        conn.close()
+
+elif choice == "Change Password" and st.session_state.logged_in:
+    st.subheader("Change Password")
+    old = st.text_input("Old Password", type="password")
+    new = st.text_input("New Password", type="password")
+    confirm = st.text_input("Confirm New Password", type="password")
+
+    if st.button("Update Password"):
+        conn = get_db_connection()
+        cur = conn.execute("SELECT password FROM users WHERE username = ?", (st.session_state.username,))
+        row = cur.fetchone()
+        if row and row[0] == hash_password(old):
+            cur = conn.execute("SELECT change_count FROM password_changes WHERE username = ?", (st.session_state.username,))
+            count_row = cur.fetchone()
+            change_count = count_row[0] if count_row else 0
+            if change_count >= 2:
+                st.warning("Password change limit exceeded.")
+            elif new != confirm:
+                st.warning("New passwords do not match.")
+            else:
+                conn.execute("UPDATE users SET password = ? WHERE username = ?", (hash_password(new), st.session_state.username))
+                conn.execute("INSERT OR REPLACE INTO password_changes (username, change_count) VALUES (?, ?)",
+                             (st.session_state.username, change_count + 1))
+                conn.commit()
+                st.success("Password updated.")
+        else:
+            st.warning("Old password is incorrect.")
+        conn.close()
+
+elif choice == "Professor Panel" and st.session_state.logged_in:
+    st.subheader("Professor Panel")
+    section = st.text_input("Enter section to view results")
+    if st.button("Load Results"):
+        filename = f"{section}_results.csv"
+        if os.path.isfile(filename):
+            df = pd.read_csv(filename)
+            st.dataframe(df)
+            csv = df.to_csv(index=False).encode("utf-8")
+            st.download_button("Download CSV", csv, file_name=f"{section}_results.csv")
+        else:
+            st.warning("No results found for this section.")
+
+elif choice == "Professor Monitoring Panel" and st.session_state.logged_in:
+    st.subheader("Professor Monitoring Panel")
+    live = get_live_students()
+    if live:
+        st.write("Live Students Writing the Quiz:")
+        for student in live:
+            st.write(f"- {student}")
+    else:
+        st.info("No students are currently writing the quiz.")
+
+elif choice == "View Recorded Video" and st.session_state.logged_in:
+    st.subheader("Recorded Webcam Video")
+    recordings = os.listdir(RECORDING_DIR)
+    user_videos = [f for f in recordings if f.startswith(st.session_state.username)]
+    if user_videos:
+        for video_file in user_videos:
+            st.video(os.path.join(RECORDING_DIR, video_file))
+    else:
+        st.info("No recordings found.")
+
 
 # All other code remains exactly as you already have it (Take Quiz, Change Password, Professor Panel, etc.)
 # You can paste your existing blocks below this line.
