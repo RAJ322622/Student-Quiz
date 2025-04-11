@@ -92,7 +92,7 @@ def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 # Register user
-def register_user(username, password, role):
+def register_user(username, password, role, email):
     conn = get_db_connection()
     try:
         conn.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
