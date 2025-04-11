@@ -219,71 +219,21 @@ elif choice == "Login":
             st.session_state.username = username
             st.success("Login successful!")
 
-st.markdown("### Forgot Password?")
-forgot_email = st.text_input("Enter registered email", key="reset_email_input")
-if st.button("Send Reset OTP"):
-    conn = get_db_connection()
-    user = conn.execute("SELECT username FROM users WHERE email = ?", (forgot_email,)).fetchone()
-    conn.close()
-    if user:
-        otp = str(random.randint(100000, 999999))
-        st.session_state['reset_email'] = forgot_email
-        st.session_state['reset_otp'] = otp
-        st.session_state['reset_user'] = user[0]
-        if send_email_otp(forgot_email, otp):
-            st.success("OTP sent to your email.")
-    else:
-        st.error("Email not registered.")
-
-
-if 'reset_otp' in st.session_state and 'reset_email' in st.session_state:
-    st.markdown("### Reset Password")
-
-    st.info(f"Resetting password for: {st.session_state['reset_email']}")
-
-    entered_otp = st.text_input("Enter OTP to reset password", key="reset_otp_input")
-    new_password = st.text_input("New Password", type="password", key="reset_new_password")
-
-    if st.button("Reset Password"):
-        if entered_otp == st.session_state['reset_otp']:
-            conn = get_db_connection()
-            conn.execute("UPDATE users SET password = ? WHERE email = ?", (new_password, st.session_state['reset_email']))
-            conn.commit()
-            conn.close()
-
-            st.success("Password successfully updated! You can now log in.")
-
-            # Clear session states
-            del st.session_state['reset_otp']
-            del st.session_state['reset_email']
-            del st.session_state['reset_user']
+    st.markdown("### Forgot Password?")
+    forgot_email = st.text_input("Enter registered email")
+    if st.button("Send Reset OTP"):
+        conn = get_db_connection()
+        user = conn.execute("SELECT username FROM users WHERE email = ?", (forgot_email,)).fetchone()
+        conn.close()
+        if user:
+            otp = str(random.randint(100000, 999999))
+            st.session_state['reset_email'] = forgot_email
+            st.session_state['reset_otp'] = otp
+            st.session_state['reset_user'] = user[0]
+            if send_email_otp(forgot_email, otp):
+                st.success("OTP sent to your email.")
         else:
-            st.error("Invalid OTP. Please check your email and try again.")
-
-
-
-
-# ✅ OTP input and password reset (AFTER sending OTP)
-if 'reset_otp' in st.session_state and 'reset_email' in st.session_state:
-    entered_otp = st.text_input("Enter OTP to reset password")
-    new_password = st.text_input("New Password", type="password")
-
-    if st.button("Reset Password"):
-        if entered_otp == st.session_state['reset_otp']:
-            conn = get_db_connection()
-            conn.execute("UPDATE users SET password = ? WHERE email = ?", (new_password, st.session_state['reset_email']))
-            conn.commit()
-            conn.close()
-
-            st.success("Password successfully updated! You can now log in.")
-
-            # Clear session states
-            del st.session_state['reset_otp']
-            del st.session_state['reset_email']
-            del st.session_state['reset_user']
-        else:
-            st.error("Invalid OTP. Please check your email and try again.")
-
+            st.error("Email not registered.")
 
     reset_otp_input = st.text_input("Enter OTP to reset password")
     new_password = st.text_input("New Password", type="password")
@@ -420,34 +370,14 @@ elif choice == "Change Password":
                     conn.execute("UPDATE users SET password = ? WHERE username = ?",
                                  (hash_password(new_pass), username))
                     if record:
-                        conn.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
-
+                        conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?",
+                                     (username,))
                     else:
-                        conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, ?)", (username, 1))
+                        conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)",
+                                     (username,))
                     conn.commit()
-                    conn.close()
-                    # Email score to student
-                    email = conn.execute("SELECT email FROM users WHERE username = ?", (username,)).fetchone()
-                    if email and email[0]:
-                        try:
-                            msg = EmailMessage()
-                            msg.set_content(f"Hi {username},\n\nYour quiz has been successfully submitted.\nScore: {score}/{len(QUESTIONS)}\nTime Taken: {time_taken} seconds\n\nBest of luck!")
-                            msg['Subject'] = "Secure Quiz App - Your Quiz Result"
-                            msg['From'] = "rajkumar.k0322@gmail.com"
-                            msg['To'] = email[0]
-
-                            server = smtplib.SMTP('smtp.gmail.com', 587)
-                            server.starttls()
-                            server.login("rajkumar.k0322@gmail.com", "khwb ioiy cfyt jurh")
-                            server.send_message(msg)
-                            server.quit()
-                        except Exception as e:
-                            st.warning(f"Quiz submitted, but failed to send email: {e}")
-
-                        # Reset state
-                    st.session_state.quiz_submitted = True
-                    st.session_state.camera_active = False
-                    remove_active_student(username)
+                    st.success("Password updated successfully.")
+                conn.close()
 
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
