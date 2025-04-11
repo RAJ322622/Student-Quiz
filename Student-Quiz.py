@@ -47,25 +47,15 @@ for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_sub
 
 def get_db_connection():
     conn = sqlite3.connect('quiz_app.db')
-
-    # Create 'users' table if it doesn't exist
     conn.execute('''CREATE TABLE IF NOT EXISTS users (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         username TEXT UNIQUE,
                         password TEXT,
                         role TEXT DEFAULT 'student')''')
 
-    # ✅ Try to add 'email' column only if it doesn't exist
-    try:
-        cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(users)")
-        columns = [column[1] for column in cursor.fetchall()]
-        if 'email' not in columns:
-            conn.commit()
-    except Exception as e:
-        print(f"Error checking/adding email column: {e}")
+    # Call the function here to ensure the 'email' column is added
+    add_email_column_if_not_exists()
 
-    # Create other tables
     conn.execute('''CREATE TABLE IF NOT EXISTS password_changes (
                         username TEXT PRIMARY KEY,
                         change_count INTEGER DEFAULT 0)''')
@@ -74,6 +64,7 @@ def get_db_connection():
                         attempt_count INTEGER DEFAULT 0)''')
 
     return conn
+
 
 
 def add_email_column_if_not_exists():
