@@ -219,21 +219,45 @@ elif choice == "Login":
             st.session_state.username = username
             st.success("Login successful!")
 
-    st.markdown("### Forgot Password?")
-    forgot_email = st.text_input("Enter registered email")
-    if st.button("Send Reset OTP"):
-        conn = get_db_connection()
-        user = conn.execute("SELECT username FROM users WHERE email = ?", (forgot_email,)).fetchone()
-        conn.close()
-        if user:
-            otp = str(random.randint(100000, 999999))
-            st.session_state['reset_email'] = forgot_email
-            st.session_state['reset_otp'] = otp
-            st.session_state['reset_user'] = user[0]
-            if send_email_otp(forgot_email, otp):
-                st.success("OTP sent to your email.")
+st.markdown("### Forgot Password?")
+forgot_email = st.text_input("Enter registered email")
+
+if st.button("Send Reset OTP"):
+    conn = get_db_connection()
+    user = conn.execute("SELECT username FROM users WHERE email = ?", (forgot_email,)).fetchone()
+    conn.close()
+
+    if user:
+        otp = str(random.randint(100000, 999999))
+        st.session_state['reset_email'] = forgot_email
+        st.session_state['reset_otp'] = otp
+        st.session_state['reset_user'] = user[0]
+        if send_email_otp(forgot_email, otp):
+            st.success("OTP sent to your email.")
+    else:
+        st.error("Email not registered.")
+
+# ✅ OTP input and password reset (AFTER sending OTP)
+if 'reset_otp' in st.session_state and 'reset_email' in st.session_state:
+    entered_otp = st.text_input("Enter OTP to reset password")
+    new_password = st.text_input("New Password", type="password")
+
+    if st.button("Reset Password"):
+        if entered_otp == st.session_state['reset_otp']:
+            conn = get_db_connection()
+            conn.execute("UPDATE users SET password = ? WHERE email = ?", (new_password, st.session_state['reset_email']))
+            conn.commit()
+            conn.close()
+
+            st.success("Password successfully updated! You can now log in.")
+
+            # Clear session states
+            del st.session_state['reset_otp']
+            del st.session_state['reset_email']
+            del st.session_state['reset_user']
         else:
-            st.error("Email not registered.")
+            st.error("Invalid OTP. Please check your email and try again.")
+
 
     reset_otp_input = st.text_input("Enter OTP to reset password")
     new_password = st.text_input("New Password", type="password")
