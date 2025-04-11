@@ -106,8 +106,8 @@ def hash_password(password):
 def register_user(username, password, role, email):
     conn = get_db_connection()
     try:
-        conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
-             (username, hash_password(password), role, email))
+        conn.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+                     (username, hash_password(password), role))
         conn.commit()
         st.success("Registration successful! Please login.")
     except sqlite3.IntegrityError:
@@ -223,8 +223,7 @@ elif choice == "Login":
     forgot_email = st.text_input("Enter registered email")
     if st.button("Send Reset OTP"):
         conn = get_db_connection()
-        user = conn.execute("UPDATE users SET password = ? WHERE username = ?", 
-             (hash_password(new_password), username))
+        user = conn.execute("SELECT username FROM users WHERE email = ?", (forgot_email,)).fetchone()
         conn.close()
         if user:
             otp = str(random.randint(100000, 999999))
@@ -339,7 +338,7 @@ elif choice == "Take Quiz":
                         if record:
                             conn.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
                         else:
-                            conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, ?)", (username, 1))
+                            conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, 1)", (username,))
                         conn.commit()
 
                         remove_active_student(username)
