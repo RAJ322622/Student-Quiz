@@ -129,12 +129,14 @@ def authenticate_user(username, password):
         stored_hash = user[0]
         entered_hash = hash_password(password)
 
-        # Debug: Show the stored and entered hash
+        # Debug logs
         st.write("DEBUG: Stored Hash:", stored_hash)
         st.write("DEBUG: Entered Hash:", entered_hash)
 
         return stored_hash == entered_hash
     return False
+
+
 
 
 
@@ -241,48 +243,48 @@ elif choice == "Login":
             st.error("Invalid username or password.")
 
     # ---------- Forgot Password ----------
-    st.markdown("### Forgot Password?")
-    forgot_email = st.text_input("Enter registered email", key="forgot_email_input")
-    if st.button("Send Reset OTP"):
+elif menu == "Forgot Password":
+    st.subheader("Reset your password")
+    email = st.text_input("Enter your registered email:")
+    if st.button("Send OTP"):
         conn = get_db_connection()
-        user = conn.execute("SELECT username FROM users WHERE email = ?", (forgot_email,)).fetchone()
+        user = conn.execute("SELECT username FROM users WHERE email = ?", (email,)).fetchone()
         conn.close()
-
         if user:
             otp = str(random.randint(100000, 999999))
-            st.session_state['reset_email'] = forgot_email
             st.session_state['reset_otp'] = otp
             st.session_state['reset_user'] = user[0]
-            if send_email_otp(forgot_email, otp):
-                st.success("OTP sent to your email.")
+            send_email(email, "Your OTP for password reset", f"Your OTP is: {otp}")
+            st.success("OTP sent to your email.")
         else:
             st.error("Email not registered.")
 
-    # ---------- Reset Password ----------
-    if 'reset_otp' in st.session_state and 'reset_email' in st.session_state:
-        st.markdown("### Reset Your Password")
-        entered_otp = st.text_input("Enter OTP to reset password", key="reset_otp_input")
-        new_password = st.text_input("New Password", type="password", key="reset_new_password")
-        confirm_password = st.text_input("Confirm New Password", type="password", key="reset_confirm_password")
+    if 'reset_otp' in st.session_state:
+        entered_otp = st.text_input("Enter OTP sent to your email:")
+        new_password = st.text_input("New Password", type="password")
+        confirm_password = st.text_input("Confirm New Password", type="password")
 
         if st.button("Reset Password"):
             if entered_otp == st.session_state.get('reset_otp'):
                 if new_password == confirm_password:
+                    hashed_new_password = hash_password(new_password)
+
+                    # Debug: New hash
+                    st.write("DEBUG: New Hashed Password:", hashed_new_password)
+
                     conn = get_db_connection()
                     conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                                 (hash_password(new_password), st.session_state['reset_user']))
+                                 (hashed_new_password, st.session_state['reset_user']))
                     conn.commit()
                     conn.close()
-                    st.success("Password reset successfully! You can now log in.")
-
-                    # Clear session
+                    st.success("Password reset successful! Please login.")
                     del st.session_state['reset_otp']
-                    del st.session_state['reset_email']
                     del st.session_state['reset_user']
                 else:
-                    st.error("Passwords do not match. Please try again.")
+                    st.error("Passwords do not match.")
             else:
-                st.error("Incorrect OTP. Please try again.")
+                st.error("Incorrect OTP.")
+
 
 
 
