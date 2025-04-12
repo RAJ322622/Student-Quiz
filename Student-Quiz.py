@@ -56,9 +56,7 @@ def send_email(recipient, subject, body):
         smtp.send_message(msg)
 
 
-    with smtplib.SMTP_SSL("rajkumar.k0322@gmail.com", "kcxf lzrq xnts xlng") as smtp:
-        smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-        smtp.send_message(msg)
+    
 
 def generate_otp():
     return ''.join(random.choices(string.digits, k=6))
