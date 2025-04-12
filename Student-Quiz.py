@@ -208,23 +208,23 @@ if choice == "Register":
                 st.success("OTP sent to your email.")
     
     if entered_otp == st.session_state.get('reset_otp'):
-    if new_password == confirm_password:
-        hashed_new_password = hash_password(new_password)
+        if new_password == confirm_password:
+            hashed_new_password = hash_password(new_password)
         
-        # Debug: Show the new hash
-        st.write("DEBUG: New Hashed Password:", hashed_new_password)
-
-        conn = get_db_connection()
-        conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                     (hashed_new_password, st.session_state['reset_user']))
-        conn.commit()
-        conn.close()
-        st.success("Password reset successfully! Please login with the new password.")
-        # Clear reset state
-        del st.session_state['reset_otp']
-        del st.session_state['reset_user']
-    else:
-        st.error("Passwords do not match.")
+            # Debug: Show the new hash
+            st.write("DEBUG: New Hashed Password:", hashed_new_password)
+    
+            conn = get_db_connection()
+            conn.execute("UPDATE users SET password = ? WHERE username = ?",
+                         (hashed_new_password, st.session_state['reset_user']))
+            conn.commit()
+            conn.close()
+            st.success("Password reset successfully! Please login with the new password.")
+            # Clear reset state
+            del st.session_state['reset_otp']
+            del st.session_state['reset_user']
+        else:
+            st.error("Passwords do not match.")
 
 
 
