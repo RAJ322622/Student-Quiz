@@ -246,19 +246,24 @@ elif choice == "Login":
         st.markdown("### Reset Your Password")
         entered_otp = st.text_input("Enter OTP to reset password", key="reset_otp_input")
         new_password = st.text_input("New Password", type="password", key="reset_new_password")
+        confirm_password = st.text_input("Confirm New Password", type="password", key="reset_confirm_password")
+
         if st.button("Reset Password"):
             if entered_otp == st.session_state.get('reset_otp'):
-                conn = get_db_connection()
-                conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                             (hash_password(new_password), st.session_state['reset_user']))
-                conn.commit()
-                conn.close()
-                st.success("Password reset successfully! You can now log in.")
+                if new_password == confirm_password:
+                    conn = get_db_connection()
+                    conn.execute("UPDATE users SET password = ? WHERE username = ?",
+                                 (hash_password(new_password), st.session_state['reset_user']))
+                    conn.commit()
+                    conn.close()
+                    st.success("Password reset successfully! You can now log in.")
 
-                # Clear session
-                del st.session_state['reset_otp']
-                del st.session_state['reset_email']
-                del st.session_state['reset_user']
+                    # Clear session
+                    del st.session_state['reset_otp']
+                    del st.session_state['reset_email']
+                    del st.session_state['reset_user']
+                else:
+                    st.error("Passwords do not match. Please try again.")
             else:
                 st.error("Incorrect OTP. Please try again.")
 
