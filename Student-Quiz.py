@@ -329,7 +329,7 @@ elif choice == "Take Quiz":
                         for q in QUESTIONS:
                             if answers.get(q["question"]) == q["answer"]:
                                 score += 1
-                                                time_taken = round(time.time() - st.session_state.quiz_start_time, 2)
+                        time_taken = round(time.time() - st.session_state.quiz_start_time, 2)
 
                         new_row = pd.DataFrame([[username, hash_password(username), st.session_state.usn, st.session_state.section, score, time_taken, datetime.now()]],
                                                columns=["Username", "Hashed_Password", "USN", "Section", "Score", "Time_Taken", "Timestamp"])
