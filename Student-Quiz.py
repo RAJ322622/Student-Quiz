@@ -18,12 +18,12 @@ def send_email_otp(to_email, otp):
         msg = EmailMessage()
         msg.set_content(f"Your OTP for Secure Quiz App is: {otp}")
         msg['Subject'] = "Email Verification OTP - Secure Quiz App"
-        msg['From'] = "rajkumar.k0322@gmail.com"
+        msg['From'] = "rajkumar.k03@gmail.com"
         msg['To'] = to_email
 
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
-        server.login("rajkumar.k0322@gmail.com", "kcxf lzrq xnts xlng")  # App Password
+        server.login("rajkumar.k03@gmail.com", "kcxf lzrq xnts xln")  # App Password
         server.send_message(msg)
         server.quit()
         return True
@@ -399,31 +399,34 @@ elif choice == "Take Quiz":
 
 
 elif choice == "Change Password":
-    # No login check required
-    new_pass = st.text_input("New Password", type="password")
-    confirm_pass = st.text_input("Confirm New Password", type="password")
-
-    if st.button("Change Password"):
-        if new_pass != confirm_pass:
-            st.error("Passwords do not match!")
-        else:
-            # Check password strength (you can add your own validation here)
-            if len(new_pass) < 8:
-                st.error("Password must be at least 8 characters long.")
-            elif not any(char.isdigit() for char in new_pass):
-                st.error("Password must contain at least one number.")
-            elif not any(char.isalpha() for char in new_pass):
-                st.error("Password must contain at least one letter.")
+    if not st.session_state.logged_in:
+        st.warning("Please login first!")
+    else:
+        username = st.session_state.username
+        old_pass = st.text_input("Old Password", type="password")
+        new_pass = st.text_input("New Password", type="password")
+        if st.button("Change Password"):
+            if not authenticate_user(username, old_pass):
+                st.error("Old password is incorrect!")
             else:
-                # Update password in the database
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                # Assuming there's a default user or logic for setting username here
-                username = 'default_user'  # Replace with a dynamic username if needed
-                cursor.execute("UPDATE users SET password = ? WHERE username = ?", (hash_password(new_pass), username))
-                conn.commit()
-                st.success("Password updated successfully.")
-
+                cursor.execute("SELECT change_count FROM password_changes WHERE username = ?", (username,))
+                record = cursor.fetchone()
+                if record and record[0] >= 2:
+                    st.error("Password can only be changed twice.")
+                else:
+                    conn.execute("UPDATE users SET password = ? WHERE username = ?",
+                                 (hash_password(new_pass), username))
+                    if record:
+                        conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?",
+                                     (username,))
+                    else:
+                        conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)",
+                                     (username,))
+                    conn.commit()
+                    st.success("Password updated successfully.")
+                conn.close()
 
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
