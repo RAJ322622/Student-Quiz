@@ -23,7 +23,7 @@ def send_email_otp(to_email, otp):
 
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
-        server.login("rajkumar.k0322@gmail.com", "khwb ioiy cfyt jurh")  # App Password
+        server.login("rajkumar.k0322@gmail.com", "kcxf lzrq xnts xlng")  # App Password
         server.send_message(msg)
         server.quit()
         return True
@@ -211,20 +211,26 @@ if choice == "Register":
 
 elif choice == "Login":
     st.subheader("Login")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+
+    # ---------- Login Form ----------
+    username = st.text_input("Username", key="login_username")
+    password = st.text_input("Password", type="password", key="login_password")
     if st.button("Login"):
         if authenticate_user(username, password):
             st.session_state.logged_in = True
             st.session_state.username = username
             st.success("Login successful!")
+        else:
+            st.error("Invalid username or password.")
 
+    # ---------- Forgot Password ----------
     st.markdown("### Forgot Password?")
-    forgot_email = st.text_input("Enter registered email")
+    forgot_email = st.text_input("Enter registered email", key="forgot_email_input")
     if st.button("Send Reset OTP"):
         conn = get_db_connection()
         user = conn.execute("SELECT username FROM users WHERE email = ?", (forgot_email,)).fetchone()
         conn.close()
+
         if user:
             otp = str(random.randint(100000, 999999))
             st.session_state['reset_email'] = forgot_email
@@ -235,18 +241,27 @@ elif choice == "Login":
         else:
             st.error("Email not registered.")
 
-    reset_otp_input = st.text_input("Enter OTP to reset password")
-    new_password = st.text_input("New Password", type="password")
-    if st.button("Reset Password"):
-        if reset_otp_input == st.session_state.get('reset_otp'):
-            conn = get_db_connection()
-            conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                         (hash_password(new_password), st.session_state['reset_user']))
-            conn.commit()
-            conn.close()
-            st.success("Password reset successfully!")
-        else:
-            st.error("Incorrect OTP.")
+    # ---------- Reset Password ----------
+    if 'reset_otp' in st.session_state and 'reset_email' in st.session_state:
+        st.markdown("### Reset Your Password")
+        entered_otp = st.text_input("Enter OTP to reset password", key="reset_otp_input")
+        new_password = st.text_input("New Password", type="password", key="reset_new_password")
+        if st.button("Reset Password"):
+            if entered_otp == st.session_state.get('reset_otp'):
+                conn = get_db_connection()
+                conn.execute("UPDATE users SET password = ? WHERE username = ?",
+                             (hash_password(new_password), st.session_state['reset_user']))
+                conn.commit()
+                conn.close()
+                st.success("Password reset successfully! You can now log in.")
+
+                # Clear session
+                del st.session_state['reset_otp']
+                del st.session_state['reset_email']
+                del st.session_state['reset_user']
+            else:
+                st.error("Incorrect OTP. Please try again.")
+
 
 
 elif choice == "Take Quiz":
