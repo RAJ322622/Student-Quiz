@@ -124,7 +124,18 @@ def authenticate_user(username, password):
     cursor = conn.execute("SELECT password FROM users WHERE username = ?", (username,))
     user = cursor.fetchone()
     conn.close()
-    return user and user[0] == hash_password(password)
+
+    if user:
+        stored_hash = user[0]
+        entered_hash = hash_password(password)
+
+        # Debug: Show the stored and entered hash
+        st.write("DEBUG: Stored Hash:", stored_hash)
+        st.write("DEBUG: Entered Hash:", entered_hash)
+
+        return stored_hash == entered_hash
+    return False
+
 
 
 # Get user role
@@ -194,22 +205,25 @@ if choice == "Register":
                 st.session_state['reg_data'] = (username, hash_password(password), role, email)
                 st.success("OTP sent to your email.")
     
-    otp_entered = st.text_input("Enter OTP")
-    if st.button("Verify and Register"):
-        if otp_entered == st.session_state.get('reg_otp'):
-            username, password_hashed, role, email = st.session_state['reg_data']
-            conn = get_db_connection()
-            try:
-                conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
-                         (username, password_hashed, role, email))
-                conn.commit()
-                st.success("Registration successful! Please login.")
-            except sqlite3.IntegrityError:
-                st.error("Username or Email already exists!")
-            conn.close()
+    if entered_otp == st.session_state.get('reset_otp'):
+    if new_password == confirm_password:
+        hashed_new_password = hash_password(new_password)
+        
+        # Debug: Show the new hash
+        st.write("DEBUG: New Hashed Password:", hashed_new_password)
 
-        else:
-            st.error("Incorrect OTP!")
+        conn = get_db_connection()
+        conn.execute("UPDATE users SET password = ? WHERE username = ?",
+                     (hashed_new_password, st.session_state['reset_user']))
+        conn.commit()
+        conn.close()
+        st.success("Password reset successfully! Please login with the new password.")
+        # Clear reset state
+        del st.session_state['reset_otp']
+        del st.session_state['reset_user']
+    else:
+        st.error("Passwords do not match.")
+
 
 
 elif choice == "Login":
