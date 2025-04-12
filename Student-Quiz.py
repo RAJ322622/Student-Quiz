@@ -100,7 +100,10 @@ def add_email_column_if_not_exists():
 
 # Password hashing
 def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+    password_hashed = hash_password(password)
+    conn.execute("UPDATE users SET password = ? WHERE username = ?",
+             (hash_password(new_password), st.session_state['reset_user']))
+
 
 # Register user
 def register_user(username, password, role, email):
@@ -123,6 +126,7 @@ def authenticate_user(username, password):
     user = cursor.fetchone()
     conn.close()
     return user and user[0] == hash_password(password)
+
 
 # Get user role
 def get_user_role(username):
