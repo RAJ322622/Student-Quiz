@@ -98,9 +98,9 @@ def add_email_column_if_not_exists():
     conn.close()
 
 
-# Password hashing
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
+
 
 
 
