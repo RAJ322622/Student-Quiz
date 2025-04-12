@@ -247,8 +247,8 @@ elif menu == "Forgot Password":
                 st.success("OTP sent to your registered email.")
             else:
                 st.error("Email not found.")
-            else:
-                st.error("Please enter a valid email.")
+        else:
+            st.error("Please enter a valid email.")
     
     if session_state.generated_otp:  # Proceed only if OTP has been sent
         otp_input = st.text_input("Enter OTP received on Email")
