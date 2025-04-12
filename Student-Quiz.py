@@ -40,8 +40,8 @@ quiz = {
 }
 
 # Email credentials
-EMAIL_ADDRESS = "your_email@gmail.com"
-EMAIL_PASSWORD = "your_app_password"
+EMAIL_ADDRESS = "rajkumar.k0322@gmail.com"
+EMAIL_PASSWORD = "kcxflzrqxntsxlng"  # App password, not your regular Gmail password
 
 def send_email(recipient, subject, body):
     msg = EmailMessage()
@@ -49,6 +49,12 @@ def send_email(recipient, subject, body):
     msg["From"] = EMAIL_ADDRESS
     msg["To"] = recipient
     msg.set_content(body)
+
+    # ✅ Correct SMTP host and port
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        smtp.send_message(msg)
+
 
     with smtplib.SMTP_SSL("rajkumar.k0322@gmail.com", "kcxf lzrq xnts xlng") as smtp:
         smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
