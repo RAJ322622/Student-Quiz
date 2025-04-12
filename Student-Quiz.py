@@ -334,34 +334,55 @@ elif choice == "Take Quiz":
                         new_row = pd.DataFrame([[username, hash_password(username), st.session_state.usn, st.session_state.section, score, time_taken, datetime.now()]],
                                                columns=["Username", "Hashed_Password", "USN", "Section", "Score", "Time_Taken", "Timestamp"])
 
-                        try:
-                            old_df_prof = pd.read_csv(PROF_CSV_FILE)
-                            full_df = pd.concat([old_df_prof, new_row], ignore_index=True)
-                        except FileNotFoundError:
-                            full_df = new_row
+                                                # Save results to professor CSV
                         full_df.to_csv(PROF_CSV_FILE, index=False)
 
-                        new_row[["Username", "USN", "Section", "Score", "Time_Taken", "Timestamp"]].to_csv(
-                            STUDENT_CSV_FILE, mode='a', index=False, header=not os.path.exists(STUDENT_CSV_FILE)
-                        )
+                        # Save to student CSV (section-wise)
+                        section_file = f"{st.session_state.section}_results.csv"
+                        try:
+                            old_df_student = pd.read_csv(section_file)
+                            student_df = pd.concat([old_df_student, new_row], ignore_index=True)
+                        except FileNotFoundError:
+                            student_df = new_row
+                        student_df.to_csv(section_file, index=False)
 
-                        section_csv = f"section_{st.session_state.section}.csv"
-                        new_row.to_csv(section_csv, mode='a', index=False, header=not os.path.exists(section_csv))
-
-                        st.success(f"Quiz submitted! Your score: {score}")
-
-                        if record:
-                            conn.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
+                        # Send result via email
+                        conn = get_db_connection()
+                        email_row = conn.execute("SELECT email FROM users WHERE username = ?", (username,)).fetchone()
+                        conn.close()
+                        if email_row:
+                            student_email = email_row[0]
+                            result_msg = EmailMessage()
+                            result_msg.set_content(f"Hi {username},\n\nYou have successfully completed the quiz.\nYour Score: {score}/{len(QUESTIONS)}\nTime Taken: {time_taken} seconds\n\nThank you!")
+                            result_msg['Subject'] = "Quiz Submission Confirmation"
+                            result_msg['From'] = "rajkumar.k0322@gmail.com"
+                            result_msg['To'] = student_email
+                            try:
+                                server = smtplib.SMTP('smtp.gmail.com', 587)
+                                server.starttls()
+                                server.login("rajkumar.k0322@gmail.com", "kcxf lzrq xnts xlng")
+                                server.send_message(result_msg)
+                                server.quit()
+                                st.success("Quiz submitted successfully. Result sent to your email.")
+                            except Exception as e:
+                                st.warning(f"Quiz submitted, but failed to send email: {e}")
                         else:
-                            conn.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, 1)", (username,))
-                        conn.commit()
+                            st.warning("Email not found. Result not sent.")
 
-                        remove_active_student(username)
-                        st.session_state.camera_active = False
+                        # Update attempt count
+                        conn = get_db_connection()
+                        cur = conn.cursor()
+                        if record:
+                            cur.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
+                        else:
+                            cur.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, 1)", (username,))
+                        conn.commit()
+                        conn.close()
+
+                        # Reset session
                         st.session_state.quiz_submitted = True
-                        st.session_state.auto_submit = False
-                        del st.session_state.quiz_start_time  # Clean up
-            conn.close()
+                        st.session_state.camera_active = False
+                        remove_active_student(username)
 
 
 elif choice == "Change Password":
