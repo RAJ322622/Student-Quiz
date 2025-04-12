@@ -13,21 +13,20 @@ import smtplib
 from email.message import EmailMessage
 import random
 
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
-
 def send_email_otp(to_email, otp):
     try:
-        message = Mail(
-            from_email='.com',  # No Gmail or password
-            to_emails=to_email,
-            subject='Your OTP for Secure Quiz App',
-            html_content=f"<strong>Your OTP is: {otp}</strong>")
-        
-        sg = SendGridAPIClient("YOUR_SENDGRID_API_KEY")
-        response = sg.send(message)
+        msg = EmailMessage()
+        msg.set_content(f"Your OTP for Secure Quiz App is: {otp}")
+        msg['Subject'] = "Email Verification OTP - Secure Quiz App"
+        msg['From'] = "rajkumar.k0322@gmail.com"
+        msg['To'] = to_email
 
-        return response.status_code == 202
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login("rajkumar.k0322@gmail.com", "khwb ioiy cfyt jurh")  # App Password
+        server.send_message(msg)
+        server.quit()
+        return True
     except Exception as e:
         st.error(f"Failed to send OTP: {e}")
         return False
