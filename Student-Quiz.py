@@ -50,7 +50,7 @@ def send_email(recipient, subject, body):
     msg["To"] = recipient
     msg.set_content(body)
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+    with smtplib.SMTP_SSL("rajkumar.k0322@gmail.com", "kcxf lzrq xnts xlng") as smtp:
         smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
         smtp.send_message(msg)
 
