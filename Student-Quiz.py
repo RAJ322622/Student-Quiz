@@ -23,7 +23,7 @@ def send_email_otp(to_email, otp):
 
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
-        server.login("rajkumar.k0322@gmail.com", "khwb ioiy cfyt jurh")  # App Password
+        server.login("rajkumar.k0322@gmail.com", "kcxf lzrq xnts xlng")  # App Password
         server.send_message(msg)
         server.quit()
         return True
