@@ -224,9 +224,18 @@ elif choice == "Login":
             st.error("Invalid username or password.")
 
     elif menu == "Forgot Password":
-        st.subheader("Forgot Password")
-        email = st.text_input("Enter your registered Email ID")
-        if st.button("Send OTP"):
+    st.subheader("Forgot Password")
+    email = st.text_input("Enter your registered Email ID")
+    
+    # Initialize session state variables if not already set
+    if 'generated_otp' not in session_state:
+        session_state.generated_otp = None
+    if 'email_for_reset' not in session_state:
+        session_state.email_for_reset = None
+
+    if st.button("Send OTP"):
+        # Check if email is entered
+        if email:
             cur.execute("SELECT username FROM users WHERE email = ?", (email,))
             user = cur.fetchone()
             if user:
@@ -238,28 +247,32 @@ elif choice == "Login":
                 st.success("OTP sent to your registered email.")
             else:
                 st.error("Email not found.")
-
-    otp_input = st.text_input("Enter OTP received on Email")
-    new_password = st.text_input("Enter New Password", type="password")
-    confirm_password = st.text_input("Confirm New Password", type="password")
-
-    if st.button("Reset Password"):
-        if otp_input == session_state.generated_otp:
-            if new_password == confirm_password:
-                # Get the username again (in case of refresh or session loss)
-                cur.execute("SELECT username FROM users WHERE email = ?", (session_state.email_for_reset,))
-                user = cur.fetchone()
-                if user:
-                    username = user[0]
-                    conn.execute("UPDATE users SET password = ? WHERE username = ?", (new_password, username))
-                    conn.commit()
-                    st.success("Password reset successful. You can now log in with your new password.")
-                else:
-                    st.error("User not found.")
-            else:
-                st.error("Passwords do not match.")
         else:
-            st.error("Invalid OTP.")
+            st.error("Please enter a valid email.")
+
+    if session_state.generated_otp:  # Proceed only if OTP has been sent
+        otp_input = st.text_input("Enter OTP received on Email")
+        new_password = st.text_input("Enter New Password", type="password")
+        confirm_password = st.text_input("Confirm New Password", type="password")
+
+        if st.button("Reset Password"):
+            if otp_input == session_state.generated_otp:
+                if new_password == confirm_password:
+                    # Get the username again (in case of refresh or session loss)
+                    cur.execute("SELECT username FROM users WHERE email = ?", (session_state.email_for_reset,))
+                    user = cur.fetchone()
+                    if user:
+                        username = user[0]
+                        conn.execute("UPDATE users SET password = ? WHERE username = ?", (new_password, username))
+                        conn.commit()
+                        st.success("Password reset successful. You can now log in with your new password.")
+                    else:
+                        st.error("User not found.")
+                else:
+                    st.error("Passwords do not match.")
+            else:
+                st.error("Invalid OTP.")
+
 
 
 
