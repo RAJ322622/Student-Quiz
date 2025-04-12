@@ -224,20 +224,20 @@ elif choice == "Login":
             st.error("Invalid username or password.")
 
     elif menu == "Forgot Password":
-    st.subheader("Forgot Password")
-    email = st.text_input("Enter your registered Email ID")
-    if st.button("Send OTP"):
-        cur.execute("SELECT username FROM users WHERE email = ?", (email,))
-        user = cur.fetchone()
-        if user:
-            username = user[0]
-            otp = ''.join(random.choices(string.digits, k=6))
-            session_state.generated_otp = otp
-            session_state.email_for_reset = email
-            send_email(email, "Password Reset OTP", f"Your OTP for password reset is: {otp}")
-            st.success("OTP sent to your registered email.")
-        else:
-            st.error("Email not found.")
+        st.subheader("Forgot Password")
+        email = st.text_input("Enter your registered Email ID")
+        if st.button("Send OTP"):
+            cur.execute("SELECT username FROM users WHERE email = ?", (email,))
+            user = cur.fetchone()
+            if user:
+                username = user[0]
+                otp = ''.join(random.choices(string.digits, k=6))
+                session_state.generated_otp = otp
+                session_state.email_for_reset = email
+                send_email(email, "Password Reset OTP", f"Your OTP for password reset is: {otp}")
+                st.success("OTP sent to your registered email.")
+            else:
+                st.error("Email not found.")
 
     otp_input = st.text_input("Enter OTP received on Email")
     new_password = st.text_input("Enter New Password", type="password")
