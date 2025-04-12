@@ -263,8 +263,8 @@ elif menu == "Forgot Password":
         else:
             st.error("Email not registered.")
 
-    # Step 2: OTP + Password Inputs
-    if 'reset_otp' in st.session_state:
+    # Step 2: Show OTP + new password fields only if OTP was sent
+    if 'reset_otp' in st.session_state and 'reset_user' in st.session_state:
         with st.form("Reset Password Form"):
             entered_otp = st.text_input("Enter OTP sent to your email:")
             new_password = st.text_input("New Password", type="password")
@@ -272,24 +272,26 @@ elif menu == "Forgot Password":
             submit_reset = st.form_submit_button("Reset Password")
 
         if submit_reset:
+            # Use default value if OTP field was empty
+            entered_otp = entered_otp.strip()
             if entered_otp == st.session_state.get('reset_otp'):
                 if new_password == confirm_password:
                     hashed_new_password = hash_password(new_password)
 
-                    # Update password in DB
                     conn = get_db_connection()
                     conn.execute("UPDATE users SET password = ? WHERE username = ?",
                                  (hashed_new_password, st.session_state['reset_user']))
                     conn.commit()
                     conn.close()
 
-                    st.success("Password reset successful! Please login.")
+                    st.success("Password reset successful! You can now login.")
                     for key in ['reset_otp', 'reset_user', 'reset_email']:
                         st.session_state.pop(key, None)
                 else:
                     st.error("Passwords do not match.")
             else:
                 st.error("Incorrect OTP.")
+
 
 elif choice == "Take Quiz":
     if not st.session_state.logged_in:
