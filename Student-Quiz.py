@@ -312,7 +312,7 @@ elif choice == "Take Quiz":
                     st.session_state.camera_active = True
 
                 if st.session_state.camera_active and not st.session_state.quiz_submitted:
-                    st.markdown("<span style='color:red;'>\U0001F7E2 Webcam is ON</span>", unsafe_allow_html=True)
+                    st.markdown("<span style='color:red;'>🔴 Webcam is ON</span>", unsafe_allow_html=True)
                     webrtc_streamer(
                         key="camera",
                         mode=WebRtcMode.SENDRECV,
