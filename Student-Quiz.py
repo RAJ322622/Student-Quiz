@@ -37,7 +37,16 @@ PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
 ACTIVE_FILE = "active_students.json"
 RECORDING_DIR = "recordings"
-os.makedirs(RECORDING_DIR, exist_ok=True)
+# Check if the directory exists
+if not os.path.exists(RECORDING_DIR):
+    os.makedirs(RECORDING_DIR)
+    print(f"Directory {RECORDING_DIR} created.")
+else:
+    print(f"Directory {RECORDING_DIR} already exists.")
+
+# Log the files in the directory to check if videos are being saved
+video_files = [f for f in os.listdir(RECORDING_DIR) if f.endswith(".mp4")]
+print(f"Files in {RECORDING_DIR}: {video_files}")
 
 # Session state defaults
 for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_submitted", "usn", "section"]:
@@ -177,18 +186,27 @@ class VideoRecorder:
         return frame
 
     def stop(self):
-        # Save the video when recording stops
         if self.frames:
             filename = f"quiz_recording_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
             filepath = os.path.join(RECORDING_DIR, filename)
 
+            # Log the filepath for debugging
+            print(f"Saving video to {filepath}")
+            
             height, width, _ = self.frames[0].shape
             out = cv2.VideoWriter(filepath, cv2.VideoWriter_fourcc(*'mp4v'), 10, (width, height))
 
             for frame in self.frames:
                 out.write(frame)
             out.release()
+
+            # Confirm video saved
+            print(f"Video saved: {filename}")
             return filename
+        else:
+            print("No frames recorded!")  # If no frames are recorded
+            return None
+
 
 # UI Starts
 st.title("\U0001F393 Secure Quiz App with Webcam \U0001F4F5")
@@ -287,7 +305,14 @@ elif choice == "Login":
 
 
 
-
+# Test if writing is possible
+test_file = os.path.join(RECORDING_DIR, "test_video.mp4")
+try:
+    with open(test_file, "w") as f:
+        f.write("Test content to ensure the app can write files.")
+    print("Test file created successfully.")
+except Exception as e:
+    print(f"Error creating test file: {e}")
 elif choice == "Take Quiz":
     if not st.session_state.logged_in:
         st.warning("Please login first!")
@@ -534,16 +559,13 @@ elif choice == "Professor Monitoring Panel":
 
 elif choice == "View Recorded Video":
     st.subheader("Recorded Quiz Videos")
-
-    # List all video files in the RECORDING_DIR
     video_files = [f for f in os.listdir(RECORDING_DIR) if f.endswith(".mp4")]
-    
+    print(f"Found video files: {video_files}")  # Log the video files in the directory
+
     if video_files:
-        # Show a selectbox to choose a recorded video
         selected_video = st.selectbox("Select a recorded video:", video_files)
-        
-        # Display the selected video
         st.video(os.path.join(RECORDING_DIR, selected_video))
     else:
         st.warning("No recorded videos found.")
+
 
