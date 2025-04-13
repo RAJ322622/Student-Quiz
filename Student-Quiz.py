@@ -341,6 +341,7 @@ elif choice == "Take Quiz":
                                                columns=["Username", "Hashed_Password", "USN", "Section", "Score", "Time_Taken", "Timestamp"])
 
                         # Append to professor's CSV
+                                                # Append to professor's CSV
                         if os.path.exists(PROF_CSV_FILE):
                             prof_df = pd.read_csv(PROF_CSV_FILE)
                             prof_df = pd.concat([prof_df, new_row], ignore_index=True)
@@ -348,22 +349,49 @@ elif choice == "Take Quiz":
                             prof_df = new_row
                         prof_df.to_csv(PROF_CSV_FILE, index=False)
 
-                        # Save to student section CSV
+                        # Save to student section-wise CSV
                         section_file = f"{st.session_state.section}_results.csv"
                         if os.path.exists(section_file):
-                            student_df = pd.read_csv(section_file)
-                            student_df = pd.concat([student_df, new_row], ignore_index=True)
+                            sec_df = pd.read_csv(section_file)
+                            sec_df = pd.concat([sec_df, new_row], ignore_index=True)
                         else:
-                            student_df = new_row
-                        student_df.to_csv(section_file, index=False)
+                            sec_df = new_row
+                        sec_df.to_csv(section_file, index=False)
 
-                        # Update quiz attempts
+                        # Update attempts
                         if record:
                             cur.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
                         else:
                             cur.execute("INSERT INTO quiz_attempts (username, attempt_count) VALUES (?, ?)", (username, 1))
                         conn.commit()
                         conn.close()
+
+                        # Send results via email
+                        conn = get_db_connection()
+                        email_result = conn.execute("SELECT email FROM users WHERE username = ?", (username,)).fetchone()
+                        conn.close()
+                        if email_result:
+                            student_email = email_result[0]
+                            try:
+                                msg = EmailMessage()
+                                msg.set_content(f"Dear {username},\n\nYou have successfully submitted your quiz.\nScore: {score}/{len(QUESTIONS)}\nTime Taken: {time_taken} seconds\n\nThank you for participating.")
+                                msg['Subject'] = "Quiz Submission Confirmation"
+                                msg['From'] = "rajkumar.k0322@gmail.com"
+                                msg['To'] = student_email
+
+                                server = smtplib.SMTP('smtp.gmail.com', 587)
+                                server.starttls()
+                                server.login("rajkumar.k0322@gmail.com", "kcxf lzrq xnts xlng")
+                                server.send_message(msg)
+                                server.quit()
+                            except Exception as e:
+                                st.error(f"Result email failed: {e}")
+
+                        st.success(f"Quiz submitted successfully! Your score is {score}/{len(QUESTIONS)}.")
+                        st.session_state.quiz_submitted = True
+                        st.session_state.camera_active = False
+                        remove_active_student(username)
+
 
                         # Send result via email
                         email_conn = get_db_connection()
