@@ -140,28 +140,37 @@ QUESTIONS = [
     {"question": "Which loop is used when the number of iterations is known?", "options": ["while", "do-while", "for", "if"], "answer": "for"},
 ]
 
+
 class VideoRecorder(VideoTransformerBase):
     def __init__(self):
         self.frames = []
+        self.recording_started = False
+        self.video_writer = None
+        self.filename = None
     
     def transform(self, frame):
+        if not self.recording_started:
+            self.start_recording()
+        
         img = frame.to_ndarray(format="bgr24")
-        self.frames.append(img)
+        self.video_writer.write(img)
         return frame
     
-    def stop(self):
-        if self.frames:
-            filename = f"quiz_recording_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
-            filepath = os.path.join(RECORDING_DIR, filename)
-            
-            height, width, _ = self.frames[0].shape
-            out = cv2.VideoWriter(filepath, cv2.VideoWriter_fourcc(*'mp4v'), 10, (width, height))
-            
-            for frame in self.frames:
-                out.write(frame)
-            out.release()
-            
-            return filename
+    def start_recording(self):
+        os.makedirs(RECORDING_DIR, exist_ok=True)
+        self.filename = f"quiz_recording_{st.session_state.username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+        filepath = os.path.join(RECORDING_DIR, self.filename)
+        
+        # Use a reasonable frame size (adjust if needed)
+        frame_size = (640, 480)
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        self.video_writer = cv2.VideoWriter(filepath, fourcc, 10, frame_size)
+        self.recording_started = True
+    
+    def stop_recording(self):
+        if self.video_writer is not None:
+            self.video_writer.release()
+            return self.filename
         return None
 
 # UI Starts
@@ -297,6 +306,22 @@ elif choice == "Take Quiz":
                         async_transform=True
                     )
 
+            # Store the recorder instance in session state
+            if webrtc_ctx.video_transformer:
+                st.session_state.video_recorder = webrtc_ctx.video_transformer
+
+            # ... (in the quiz submission section)
+            
+            if (submit_btn or auto_submit_triggered) and not st.session_state.quiz_submitted:
+                # ... (your existing submission code)
+                
+                # Save the video recording
+                if 'video_recorder' in st.session_state:
+                    video_filename = st.session_state.video_recorder.stop_recording()
+                    if video_filename:
+                        st.success(f"Quiz recording saved as: {video_filename}")
+                    del st.session_state.video_recorder
+
                 for idx, question in enumerate(QUESTIONS):
                     st.markdown(f"**Q{idx+1}:** {question['question']}")
                     ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
@@ -429,13 +454,45 @@ elif choice == "Professor Monitoring Panel":
                 st.warning("Note: Real-time video streaming from remote users is not supported on Streamlit Community Cloud.")
                 st.write(f"\U0001F464 {student_id} is currently taking the quiz.")
 
+# In the View Recorded Video section:
+
 elif choice == "View Recorded Video":
     st.subheader("Recorded Quiz Videos")
-    video_files = [f for f in os.listdir(RECORDING_DIR) if f.endswith(".mp4")]
-    print(f"Found video files: {video_files}")
-
+    
+    # Ensure the directory exists
+    os.makedirs(RECORDING_DIR, exist_ok=True)
+    
+    # List all video files
+    video_files = [f for f in os.listdir(RECORDING_DIR) if f.endswith('.mp4')]
+    
     if video_files:
-        selected_video = st.selectbox("Select a recorded video:", video_files)
-        st.video(os.path.join(RECORDING_DIR, selected_video))
+        st.write(f"Found {len(video_files)} recorded videos:")
+        
+        # Show only videos for the current user if logged in
+        if st.session_state.logged_in:
+            user_videos = [f for f in video_files if st.session_state.username in f]
+            if user_videos:
+                selected_video = st.selectbox("Select your recorded video:", user_videos)
+                video_path = os.path.join(RECORDING_DIR, selected_video)
+                st.video(video_path)
+            else:
+                st.warning("No recordings found for your account.")
+        
+        # Professor can see all videos
+        elif st.session_state.prof_verified:
+            selected_video = st.selectbox("Select a video to view:", video_files)
+            video_path = os.path.join(RECORDING_DIR, selected_video)
+            st.video(video_path)
+            
+            # Add option to delete videos
+            if st.button("Delete Selected Video"):
+                try:
+                    os.remove(video_path)
+                    st.success("Video deleted successfully!")
+                    st.experimental_rerun()
+                except Exception as e:
+                    st.error(f"Error deleting video: {e}")
+        else:
+            st.warning("Please log in to view your recordings.")
     else:
-        st.warning("No recorded videos found.")
+        st.warning("No recorded videos found in the recordings directory.")
