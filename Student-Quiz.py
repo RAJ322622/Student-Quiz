@@ -168,9 +168,27 @@ QUESTIONS = [
 ]
 
 # Video processor
-class VideoProcessor(VideoTransformerBase):
-    def recv(self, frame):
+class VideoRecorder:
+    def __init__(self):
+        self.frames = []
+
+    def transform(self, frame):
+        self.frames.append(frame)
         return frame
+
+    def stop(self):
+        # Save the video when recording stops
+        if self.frames:
+            filename = f"quiz_recording_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+            filepath = os.path.join(RECORDING_DIR, filename)
+
+            height, width, _ = self.frames[0].shape
+            out = cv2.VideoWriter(filepath, cv2.VideoWriter_fourcc(*'mp4v'), 10, (width, height))
+
+            for frame in self.frames:
+                out.write(frame)
+            out.release()
+            return filename
 
 # UI Starts
 st.title("\U0001F393 Secure Quiz App with Webcam \U0001F4F5")
