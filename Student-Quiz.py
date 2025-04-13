@@ -423,6 +423,24 @@ elif choice == "Take Quiz":
                         st.session_state.quiz_submitted = True
                         st.session_state.camera_active = False
                         remove_active_student(username)
+                        # ⏺️ Save recorded video after submission
+                        if 'recorder' in locals() and recorder.video_transformer:
+                            frames = recorder.video_transformer.frames
+                            if frames:
+                                filename = f"{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+                                filepath = os.path.join(RECORDING_DIR, filename)
+                        
+                                height, width, _ = frames[0].shape
+                                out = cv2.VideoWriter(filepath, cv2.VideoWriter_fourcc(*'mp4v'), 10, (width, height))
+                        
+                                for frame in frames:
+                                    out.write(frame)
+                                out.release()
+                        
+                                st.success(f"📹 Quiz recording saved as: {filename}")
+
+                         
+
 
 
 
