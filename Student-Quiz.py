@@ -92,6 +92,7 @@ class VideoRecorder(VideoTransformerBase):
             out.release()
             return self.output_file
         return None
+            
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -239,22 +240,23 @@ elif choice == "Take Quiz":
     else:
         username = st.session_state.username
         
+        # Only show USN/Section inputs if not already provided
         if not st.session_state.get('usn') or not st.session_state.get('section'):
-            usn = st.text_input("Enter your USN")
-            section = st.text_input("Enter your Section")
-            if st.button("Start Quiz"):
-                if usn and section:
-                    st.session_state.usn = usn.strip().upper()
-                    st.session_state.section = section.strip().upper()
-                    st.session_state.camera_active = True
-                    st.rerun()
-                else:
-                    st.error("Please enter both USN and Section")
+            with st.form("quiz_start_form"):
+                usn = st.text_input("Enter your USN")
+                section = st.text_input("Enter your Section")
+                if st.form_submit_button("Start Quiz"):
+                    if usn and section:
+                        st.session_state.usn = usn.strip().upper()
+                        st.session_state.section = section.strip().upper()
+                        st.session_state.camera_active = True
+                        st.session_state.video_recorder = VideoRecorder()
+                        st.rerun()
+                    else:
+                        st.error("Please enter both USN and Section")
         
+        # If USN and section are provided, proceed with quiz
         if st.session_state.get('usn') and st.session_state.get('section'):
-            if "video_recorder" not in st.session_state:
-                st.session_state.video_recorder = VideoRecorder()
-                
             conn = get_db_connection()
             cur = conn.cursor()
             cur.execute("SELECT attempt_count FROM quiz_attempts WHERE username = ?", (username,))
@@ -264,12 +266,14 @@ elif choice == "Take Quiz":
             if attempt_count >= 2:
                 st.error("You have already taken the quiz 2 times. No more attempts allowed.")
             else:
-                score = 0
+                # Initialize timer if not already started
                 if "quiz_start_time" not in st.session_state:
                     st.session_state.quiz_start_time = time.time()
+                    add_active_student(username)
 
+                # Calculate remaining time
                 time_elapsed = int(time.time() - st.session_state.quiz_start_time)
-                time_limit = 25 * 60
+                time_limit = 25 * 60  # 25 minutes
                 time_left = time_limit - time_elapsed
 
                 if time_left <= 0:
@@ -279,23 +283,25 @@ elif choice == "Take Quiz":
                     mins, secs = divmod(time_left, 60)
                     st.info(f"⏳ Time left: {mins:02d}:{secs:02d}")
 
-                answers = {}
-
+                # Automatically start camera when quiz starts
                 if st.session_state.camera_active and not st.session_state.quiz_submitted:
-                    add_active_student(username)
                     st.markdown("<span style='color:red;'>🔴 Webcam is ON - Recording in progress</span>", unsafe_allow_html=True)
-                    webrtc_streamer(
+                    webrtc_ctx = webrtc_streamer(
                         key="camera",
                         mode=WebRtcMode.SENDRECV,
                         media_stream_constraints={"video": True, "audio": False},
-                        video_processor_factory=lambda: st.session_state.video_recorder,
+                        video_processor_factory=VideoRecorder,
+                        async_processing=True,
                     )
 
+                # Quiz questions
+                answers = {}
                 for idx, question in enumerate(QUESTIONS):
                     st.markdown(f"**Q{idx+1}:** {question['question']}")
                     ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
                     answers[question['question']] = ans
 
+                # Submit button
                 submit_btn = st.button("Submit Quiz")
                 auto_submit_triggered = st.session_state.get("auto_submit", False)
 
@@ -303,18 +309,26 @@ elif choice == "Take Quiz":
                     if None in answers.values():
                         st.error("Please answer all questions before submitting the quiz.")
                     else:
+                        # Calculate score
+                        score = 0
                         for q in QUESTIONS:
                             if answers.get(q["question"]) == q["answer"]:
                                 score += 1
                         time_taken = round(time.time() - st.session_state.quiz_start_time, 2)
 
-                        video_file = st.session_state.video_recorder.save_recording()
-                        if video_file:
-                            st.session_state.recorded_video = video_file
+                        # Save recording if available
+                        if webrtc_ctx and webrtc_ctx.video_processor:
+                            video_file = webrtc_ctx.video_processor.save_recording()
+                            if video_file:
+                                st.session_state.recorded_video = video_file
 
-                        new_row = pd.DataFrame([[username, hash_password(username), st.session_state.usn, st.session_state.section, score, time_taken, datetime.now()]],
-                                           columns=["Username", "Hashed_Password", "USN", "Section", "Score", "Time_Taken", "Timestamp"])
+                        # Save results and update database
+                        new_row = pd.DataFrame([[username, hash_password(username), st.session_state.usn, 
+                                               st.session_state.section, score, time_taken, datetime.now()]],
+                                             columns=["Username", "Hashed_Password", "USN", "Section", 
+                                                     "Score", "Time_Taken", "Timestamp"])
 
+                        # Save to professor CSV
                         if os.path.exists(PROF_CSV_FILE):
                             prof_df = pd.read_csv(PROF_CSV_FILE)
                             prof_df = pd.concat([prof_df, new_row], ignore_index=True)
@@ -322,6 +336,7 @@ elif choice == "Take Quiz":
                             prof_df = new_row
                         prof_df.to_csv(PROF_CSV_FILE, index=False)
 
+                        # Save to section CSV
                         section_file = f"{st.session_state.section}_results.csv"
                         if os.path.exists(section_file):
                             sec_df = pd.read_csv(section_file)
@@ -330,6 +345,7 @@ elif choice == "Take Quiz":
                             sec_df = new_row
                         sec_df.to_csv(section_file, index=False)
 
+                        # Update attempt count
                         if record:
                             cur.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
                         else:
@@ -337,6 +353,7 @@ elif choice == "Take Quiz":
                         conn.commit()
                         conn.close()
 
+                        # Send email notification
                         email_conn = get_db_connection()
                         email_cur = email_conn.cursor()
                         email_cur.execute("SELECT email FROM users WHERE username = ?", (username,))
@@ -360,6 +377,7 @@ elif choice == "Take Quiz":
                             except Exception as e:
                                 st.warning(f"Result email failed: {e}")
 
+                        # Clean up
                         st.success(f"✅ Quiz submitted successfully! You scored {score} out of {len(QUESTIONS)}.")
                         st.session_state.quiz_submitted = True
                         st.session_state.camera_active = False
