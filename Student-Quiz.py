@@ -70,6 +70,19 @@ def hash_password(password):
 def register_user(username, password, role, email):
     conn = get_db_connection()
     try:
+        # Check if username already exists
+        cursor = conn.execute("SELECT username FROM users WHERE username = ?", (username,))
+        if cursor.fetchone():
+            st.error("Username already exists! Please choose a different username.")
+            return False
+            
+        # Check if email already exists
+        cursor = conn.execute("SELECT email FROM users WHERE email = ?", (email,))
+        if cursor.fetchone():
+            st.error("Email already registered! Please use a different email.")
+            return False
+            
+        # If username and email are unique, proceed with registration
         conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
                     (username, hash_password(password), role, email))
         conn.commit()
@@ -224,17 +237,44 @@ if choice == "Register":
     if st.button("Send OTP"):
         if username and email and password:
             if password == confirm_password:
-                otp = str(random.randint(100000, 999999))
-                if send_email_otp(email, otp):
-                    st.session_state['reg_otp'] = otp
-                    st.session_state['reg_data'] = (username, password, role, email)
-                    st.success("OTP sent to your email!")
-                else:
-                    st.error("Failed to send OTP. Please try again.")
+                # Check if username or email already exists before sending OTP
+                conn = get_db_connection()
+                try:
+                    cursor = conn.execute("SELECT username FROM users WHERE username = ? OR email = ?", 
+                                        (username, email))
+                    existing_user = cursor.fetchone()
+                    if existing_user:
+                        if existing_user[0] == username:
+                            st.error("Username already exists! Please choose a different username.")
+                        else:
+                            st.error("Email already registered! Please use a different email.")
+                    else:
+                        otp = str(random.randint(100000, 999999))
+                        if send_email_otp(email, otp):
+                            st.session_state['reg_otp'] = otp
+                            st.session_state['reg_data'] = (username, password, role, email)
+                            st.success("OTP sent to your email!")
+                        else:
+                            st.error("Failed to send OTP. Please try again.")
+                finally:
+                    conn.close()
             else:
                 st.error("Passwords do not match!")
         else:
             st.error("Please fill all fields!")
+
+    otp_entered = st.text_input("Enter OTP")
+    if st.button("Verify and Register"):
+        if 'reg_otp' in st.session_state and otp_entered == st.session_state['reg_otp']:
+            username, password, role, email = st.session_state['reg_data']
+            if register_user(username, password, role, email):
+                st.success("Registration successful! Please login.")
+                del st.session_state['reg_otp']
+                del st.session_state['reg_data']
+            else:
+                st.error("Registration failed. Please try again with different credentials.")
+        else:
+            st.error("Invalid OTP or registration data!")
 
     otp_entered = st.text_input("Enter OTP")
     if st.button("Verify and Register"):
