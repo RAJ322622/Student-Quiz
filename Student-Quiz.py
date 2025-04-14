@@ -326,7 +326,7 @@ elif choice == "Take Quiz":
                         st.rerun()
                     else:
                         st.error("Please enter both USN and Section")
-        return
+            return
         
         # Rest of your quiz implementation...
         
