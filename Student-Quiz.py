@@ -180,9 +180,14 @@ class VideoRecorder(VideoTransformerBase):
         
     def recv(self, frame):
         if not self.recording_started:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.output_file = os.path.join(RECORDING_DIR, f"{st.session_state.username}_{timestamp}.mp4")
-            self.recording_started = True
+            # Ensure USN and section are available
+            if hasattr(st.session_state, 'usn') and hasattr(st.session_state, 'section'):
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                self.output_file = os.path.join(
+                    RECORDING_DIR, 
+                    f"{st.session_state.usn}_{st.session_state.section}_{timestamp}.mp4"
+                )
+                self.recording_started = True
             
         img = frame.to_ndarray(format="bgr24")
         self.frames.append(img)
@@ -287,21 +292,35 @@ if choice == "Register":
         else:
             st.error("Invalid OTP or registration data!")
 
-elif choice == "Login":
-    st.subheader("Login")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-    
-    if st.button("Login"):
-        if username and password:
-            if authenticate_user(username, password):
-                st.session_state.logged_in = True
-                st.session_state.username = username
-                st.success(f"Welcome {username}!")
-            else:
-                st.error("Invalid username or password")
-        else:
-            st.error("Please enter both username and password")
+elif choice == "Take Quiz":
+    if not st.session_state.logged_in:
+        st.warning("Please login first!")
+    else:
+        username = st.session_state.username
+        
+        # Initialize session state variables if they don't exist
+        if 'usn' not in st.session_state:
+            st.session_state.usn = ""
+        if 'section' not in st.session_state:
+            st.session_state.section = ""
+        
+        # Only show USN/Section inputs if not already provided
+        if not st.session_state.usn or not st.session_state.section:
+            with st.form("quiz_start_form"):
+                usn = st.text_input("Enter your USN")
+                section = st.text_input("Enter your Section")
+                if st.form_submit_button("Start Quiz"):
+                    if usn and section:
+                        st.session_state.usn = usn.strip().upper()
+                        st.session_state.section = section.strip().upper()
+                        st.session_state.camera_active = True
+                        st.session_state.quiz_start_time = time.time()
+                        st.rerun()
+                    else:
+                        st.error("Please enter both USN and Section")
+            return  # Exit early if USN/section not provided yet
+        
+        # Rest of your quiz code...
 
     # Password reset functionality
     st.markdown("---")
@@ -402,11 +421,19 @@ elif choice == "Take Quiz":
                     # Webcam stream
                     if st.session_state.camera_active and not st.session_state.quiz_submitted:
                         st.markdown("<span style='color:red;'>🔴 Webcam is ON - Recording in progress</span>", unsafe_allow_html=True)
+                        
+                        # Initialize video processor only if USN and section are available
+                        def get_video_processor():
+                            if hasattr(st.session_state, 'video_recorder'):
+                                return st.session_state.video_recorder
+                            st.session_state.video_recorder = VideoRecorder()
+                            return st.session_state.video_recorder
+                        
                         webrtc_ctx = webrtc_streamer(
                             key="camera",
                             mode=WebRtcMode.SENDRECV,
                             media_stream_constraints={"video": True, "audio": False},
-                            video_processor_factory=lambda: st.session_state.video_recorder,
+                            video_processor_factory=get_video_processor,
                             async_processing=True,
                         )
 
