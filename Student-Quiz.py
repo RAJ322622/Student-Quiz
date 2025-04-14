@@ -75,17 +75,24 @@ if 'section' not in st.session_state:
 def get_db_connection():
     return sqlite3.connect('quiz_app.db')
 
+def username_exists(username):
+    conn = get_db_connection()
+    try:
+        cursor = conn.execute("SELECT 1 FROM users WHERE username = ?", (username.strip(),))
+        return cursor.fetchone() is not None
+    finally:
+        conn.close()
+
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 def register_user(username, password, role, email):
+    if username_exists(username):
+        st.error("Username already exists")
+        return False
+        
     conn = get_db_connection()
     try:
-        # Check if username already exists
-        if username_exists(username):
-            st.error("Username already exists. Please choose a different username.")
-            return False
-            
         conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
                     (username.strip(), hash_password(password), role, email.strip()))
         conn.commit()
@@ -232,22 +239,23 @@ choice = st.sidebar.selectbox("Menu", menu)
 if choice == "Register":
     st.subheader("Register New Account")
     username = st.text_input("Username")
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
-    confirm_password = st.text_input("Confirm Password", type="password")
-    role = st.selectbox("Role", ["student"])
-
+    
     # Check username availability in real-time
     if username:
         if username_exists(username):
             st.error("❌ Username already taken")
         else:
             st.success("✅ Username available")
+    
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
+    confirm_password = st.text_input("Confirm Password", type="password")
+    role = st.selectbox("Role", ["student"])
 
     if st.button("Send OTP"):
         if username and email and password:
             if password == confirm_password:
-                if not username_exists(username):  # Additional check
+                if not username_exists(username):  # Final check before sending OTP
                     otp = str(random.randint(100000, 999999))
                     if send_email_otp(email, otp):
                         st.session_state['reg_otp'] = otp
