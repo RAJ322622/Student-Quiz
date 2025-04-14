@@ -36,8 +36,10 @@ def send_email_otp(to_email, otp):
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
 ACTIVE_FILE = "active_students.json"
-RECORDING_DIR = "recordings"
-os.makedirs(RECORDING_DIR, exist_ok=True)
+# === Create directory if not exists ===
+RECORDING_DIR = "recorded_videos"
+if not os.path.exists(RECORDING_DIR):
+    os.makedirs(RECORDING_DIR)
 
 # Session state defaults
 for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_submitted", "usn", "section"]:
@@ -160,6 +162,13 @@ def get_live_students():
             return json.load(f)
     except:
         return []
+# === Function to Save Recorded Video ===
+def save_recorded_video(video_bytes, usn, section):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{usn}_{section}_{timestamp}.mp4"
+    filepath = os.path.join(RECORDING_DIR, filename)
+    with open(filepath, "wb") as f:
+        f.write(video_bytes)
 
 # Dummy question bank
 QUESTIONS = [
@@ -357,6 +366,10 @@ elif choice == "Take Quiz":
                         else:
                             sec_df = new_row
                         sec_df.to_csv(section_file, index=False)
+                        # Save metadata to a CSV
+                        with open(os.path.join(RECORDING_DIR, "recordings_log.csv"), "a", newline="") as log_file:
+                        writer = csv.writer(log_file)
+                        writer.writerow([filename, usn, section, timestamp])
 
                         # Update attempts
                         if record:
@@ -493,9 +506,17 @@ elif choice == "Professor Monitoring Panel":
 
 elif choice == "View Recorded Video":
     st.subheader("Recorded Quiz Videos")
-    video_files = [f for f in os.listdir(RECORDING_DIR) if f.endswith(".mp4")]
-    if video_files:
-        selected_video = st.selectbox("Select a recorded video:", video_files)
-        st.video(os.path.join(RECORDING_DIR, selected_video))
+
+    log_path = os.path.join(RECORDING_DIR, "recordings_log.csv")
+
+    if os.path.exists(log_path):
+        import pandas as pd
+        df = pd.read_csv(log_path, header=None, names=["Filename", "USN", "Section", "Timestamp"])
+        selected_usn = st.selectbox("Filter by USN", df["USN"].unique())
+        filtered = df[df["USN"] == selected_usn]
+
+        selected_video = st.selectbox("Select a recorded video:", filtered["Filename"].tolist())
+        video_path = os.path.join(RECORDING_DIR, selected_video)
+        st.video(video_path)
     else:
         st.warning("No recorded videos found.")
