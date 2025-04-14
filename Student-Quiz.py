@@ -70,19 +70,6 @@ def hash_password(password):
 def register_user(username, password, role, email):
     conn = get_db_connection()
     try:
-        # Check if username already exists
-        cursor = conn.execute("SELECT username FROM users WHERE username = ?", (username,))
-        if cursor.fetchone():
-            st.error("Username already exists! Please choose a different username.")
-            return False
-            
-        # Check if email already exists
-        cursor = conn.execute("SELECT email FROM users WHERE email = ?", (email,))
-        if cursor.fetchone():
-            st.error("Email already registered! Please use a different email.")
-            return False
-            
-        # If username and email are unique, proceed with registration
         conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
                     (username, hash_password(password), role, email))
         conn.commit()
@@ -180,14 +167,9 @@ class VideoRecorder(VideoTransformerBase):
         
     def recv(self, frame):
         if not self.recording_started:
-            # Ensure USN and section are available
-            if hasattr(st.session_state, 'usn') and hasattr(st.session_state, 'section'):
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                self.output_file = os.path.join(
-                    RECORDING_DIR, 
-                    f"{st.session_state.usn}_{st.session_state.section}_{timestamp}.mp4"
-                )
-                self.recording_started = True
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self.output_file = os.path.join(RECORDING_DIR, f"{st.session_state.username}_{timestamp}.mp4")
+            self.recording_started = True
             
         img = frame.to_ndarray(format="bgr24")
         self.frames.append(img)
@@ -242,27 +224,13 @@ if choice == "Register":
     if st.button("Send OTP"):
         if username and email and password:
             if password == confirm_password:
-                # Check if username or email already exists before sending OTP
-                conn = get_db_connection()
-                try:
-                    cursor = conn.execute("SELECT username FROM users WHERE username = ? OR email = ?", 
-                                        (username, email))
-                    existing_user = cursor.fetchone()
-                    if existing_user:
-                        if existing_user[0] == username:
-                            st.error("Username already exists! Please choose a different username.")
-                        else:
-                            st.error("Email already registered! Please use a different email.")
-                    else:
-                        otp = str(random.randint(100000, 999999))
-                        if send_email_otp(email, otp):
-                            st.session_state['reg_otp'] = otp
-                            st.session_state['reg_data'] = (username, password, role, email)
-                            st.success("OTP sent to your email!")
-                        else:
-                            st.error("Failed to send OTP. Please try again.")
-                finally:
-                    conn.close()
+                otp = str(random.randint(100000, 999999))
+                if send_email_otp(email, otp):
+                    st.session_state['reg_otp'] = otp
+                    st.session_state['reg_data'] = (username, password, role, email)
+                    st.success("OTP sent to your email!")
+                else:
+                    st.error("Failed to send OTP. Please try again.")
             else:
                 st.error("Passwords do not match!")
         else:
@@ -276,78 +244,24 @@ if choice == "Register":
                 st.success("Registration successful! Please login.")
                 del st.session_state['reg_otp']
                 del st.session_state['reg_data']
+        else:
+            st.error("Invalid OTP or registration data!")
+
+elif choice == "Login":
+    st.subheader("Login")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    
+    if st.button("Login"):
+        if username and password:
+            if authenticate_user(username, password):
+                st.session_state.logged_in = True
+                st.session_state.username = username
+                st.success(f"Welcome {username}!")
             else:
-                st.error("Registration failed. Please try again with different credentials.")
+                st.error("Invalid username or password")
         else:
-            st.error("Invalid OTP or registration data!")
-
-    otp_entered = st.text_input("Enter OTP")
-    if st.button("Verify and Register"):
-        if 'reg_otp' in st.session_state and otp_entered == st.session_state['reg_otp']:
-            username, password, role, email = st.session_state['reg_data']
-            if register_user(username, password, role, email):
-                st.success("Registration successful! Please login.")
-                del st.session_state['reg_otp']
-                del st.session_state['reg_data']
-        else:
-            st.error("Invalid OTP or registration data!")
-
-elif choice == "Take Quiz":
-    if not st.session_state.logged_in:
-        st.warning("Please login first!")
-    else:
-        username = st.session_state.username
-        
-        # Initialize session state variables if they don't exist
-        if 'usn' not in st.session_state:
-            st.session_state.usn = ""
-        if 'section' not in st.session_state:
-            st.session_state.section = ""
-        if 'quiz_start_time' not in st.session_state:
-            st.session_state.quiz_start_time = 0
-        if 'camera_active' not in st.session_state:
-            st.session_state.camera_active = False
-        if 'quiz_submitted' not in st.session_state:
-            st.session_state.quiz_submitted = False
-        if 'video_recorder' not in st.session_state:
-            st.session_state.video_recorder = None
-            
-        # Show USN/Section inputs if not already provided
-        if not st.session_state.usn or not st.session_state.section:
-            with st.form("quiz_start_form"):
-                usn = st.text_input("Enter your USN")
-                section = st.text_input("Enter your Section")
-                if st.form_submit_button("Start Quiz"):
-                    if usn and section:
-                        st.session_state.usn = usn.strip().upper()
-                        st.session_state.section = section.strip().upper()
-                        st.session_state.camera_active = True
-                        st.session_state.quiz_start_time = time.time()
-                        st.session_state.video_recorder = VideoRecorder()
-                        add_active_student(username)
-                        st.rerun()
-                    else:
-                        st.error("Please enter both USN and Section")
-        else:
-            # Only proceed with quiz if USN and section are provided
-            conn = get_db_connection()
-            try:
-                cursor = conn.cursor()
-                cursor.execute("SELECT attempt_count FROM quiz_attempts WHERE username = ?", (username,))
-                record = cursor.fetchone()
-                attempt_count = record[0] if record else 0
-
-                if attempt_count >= 2:
-                    st.error("You have already taken the quiz 2 times. No more attempts allowed.")
-                else:
-                    # Timer and quiz questions implementation
-                    # ... (rest of your quiz implementation)
-                    
-                    pass  # Your existing quiz implementation goes here
-                    
-            finally:
-                conn.close()
-        
+            st.error("Please enter both username and password")
 
     # Password reset functionality
     st.markdown("---")
@@ -448,19 +362,11 @@ elif choice == "Take Quiz":
                     # Webcam stream
                     if st.session_state.camera_active and not st.session_state.quiz_submitted:
                         st.markdown("<span style='color:red;'>🔴 Webcam is ON - Recording in progress</span>", unsafe_allow_html=True)
-                        
-                        # Initialize video processor only if USN and section are available
-                        def get_video_processor():
-                            if hasattr(st.session_state, 'video_recorder'):
-                                return st.session_state.video_recorder
-                            st.session_state.video_recorder = VideoRecorder()
-                            return st.session_state.video_recorder
-                        
                         webrtc_ctx = webrtc_streamer(
                             key="camera",
                             mode=WebRtcMode.SENDRECV,
                             media_stream_constraints={"video": True, "audio": False},
-                            video_processor_factory=get_video_processor,
+                            video_processor_factory=lambda: st.session_state.video_recorder,
                             async_processing=True,
                         )
 
