@@ -56,9 +56,20 @@ RECORDING_DIR = "recorded_videos"
 os.makedirs(RECORDING_DIR, exist_ok=True)
 
 # Session state initialization
-for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_submitted", "usn", "section"]:
-    if key not in st.session_state:
-        st.session_state[key] = False if key not in ["username", "usn", "section"] else ""
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if 'username' not in st.session_state:
+    st.session_state.username = ""
+if 'camera_active' not in st.session_state:
+    st.session_state.camera_active = False
+if 'prof_verified' not in st.session_state:
+    st.session_state.prof_verified = False
+if 'quiz_submitted' not in st.session_state:
+    st.session_state.quiz_submitted = False
+if 'usn' not in st.session_state:
+    st.session_state.usn = ""
+if 'section' not in st.session_state:
+    st.session_state.section = ""
 
 # Database functions
 def get_db_connection():
@@ -71,11 +82,11 @@ def register_user(username, password, role, email):
     conn = get_db_connection()
     try:
         conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
-                    (username, hash_password(password), role, email))
+                    (username.strip(), hash_password(password), role, email.strip()))
         conn.commit()
         return True
     except sqlite3.IntegrityError as e:
-        st.error(f"Registration failed: {str(e)}")
+        st.error(f"Registration failed: Username already exists or invalid data")
         return False
     finally:
         conn.close()
@@ -83,7 +94,7 @@ def register_user(username, password, role, email):
 def authenticate_user(username, password):
     conn = get_db_connection()
     try:
-        cursor = conn.execute("SELECT password FROM users WHERE username = ?", (username,))
+        cursor = conn.execute("SELECT password FROM users WHERE username = ?", (username.strip(),))
         user = cursor.fetchone()
         if user and user[0] == hash_password(password):
             return True
@@ -244,6 +255,8 @@ if choice == "Register":
                 st.success("Registration successful! Please login.")
                 del st.session_state['reg_otp']
                 del st.session_state['reg_data']
+            else:
+                st.error("Registration failed. Please try again.")
         else:
             st.error("Invalid OTP or registration data!")
 
@@ -256,8 +269,9 @@ elif choice == "Login":
         if username and password:
             if authenticate_user(username, password):
                 st.session_state.logged_in = True
-                st.session_state.username = username
-                st.success(f"Welcome {username}!")
+                st.session_state.username = username.strip()
+                st.success(f"Welcome {st.session_state.username}!")
+                st.rerun()
             else:
                 st.error("Invalid username or password")
         else:
@@ -515,6 +529,7 @@ elif choice == "Professor Panel":
             if prof_user.strip().lower() == "raj kumar" and prof_pass.strip().lower() == "raj kumar":
                 st.session_state.prof_verified = True
                 st.success("Professor verified! You can now access results.")
+                st.rerun()
             else:
                 st.error("Access denied. Invalid professor credentials.")
     else:
