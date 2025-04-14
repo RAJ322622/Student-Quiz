@@ -298,7 +298,7 @@ elif choice == "Take Quiz":
     else:
         username = st.session_state.username
         
-        # Initialize session state variables
+        # Initialize session state variables if they don't exist
         if 'usn' not in st.session_state:
             st.session_state.usn = ""
         if 'section' not in st.session_state:
@@ -309,8 +309,10 @@ elif choice == "Take Quiz":
             st.session_state.camera_active = False
         if 'quiz_submitted' not in st.session_state:
             st.session_state.quiz_submitted = False
+        if 'video_recorder' not in st.session_state:
+            st.session_state.video_recorder = None
             
-        # Only show USN/Section inputs if not already provided
+        # Show USN/Section inputs if not already provided
         if not st.session_state.usn or not st.session_state.section:
             with st.form("quiz_start_form"):
                 usn = st.text_input("Enter your USN")
@@ -326,11 +328,26 @@ elif choice == "Take Quiz":
                         st.rerun()
                     else:
                         st.error("Please enter both USN and Section")
-            return
+        else:
+            # Only proceed with quiz if USN and section are provided
+            conn = get_db_connection()
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SELECT attempt_count FROM quiz_attempts WHERE username = ?", (username,))
+                record = cursor.fetchone()
+                attempt_count = record[0] if record else 0
+
+                if attempt_count >= 2:
+                    st.error("You have already taken the quiz 2 times. No more attempts allowed.")
+                else:
+                    # Timer and quiz questions implementation
+                    # ... (rest of your quiz implementation)
+                    
+                    pass  # Your existing quiz implementation goes here
+                    
+            finally:
+                conn.close()
         
-        # Rest of your quiz implementation...
-        
-        # Rest of your quiz code...
 
     # Password reset functionality
     st.markdown("---")
