@@ -81,12 +81,17 @@ def hash_password(password):
 def register_user(username, password, role, email):
     conn = get_db_connection()
     try:
+        # Check if username already exists
+        if username_exists(username):
+            st.error("Username already exists. Please choose a different username.")
+            return False
+            
         conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
                     (username.strip(), hash_password(password), role, email.strip()))
         conn.commit()
         return True
     except sqlite3.IntegrityError as e:
-        st.error(f"Registration failed: Username already exists or invalid data")
+        st.error(f"Registration failed: {str(e)}")
         return False
     finally:
         conn.close()
@@ -232,16 +237,26 @@ if choice == "Register":
     confirm_password = st.text_input("Confirm Password", type="password")
     role = st.selectbox("Role", ["student"])
 
+    # Check username availability in real-time
+    if username:
+        if username_exists(username):
+            st.error("❌ Username already taken")
+        else:
+            st.success("✅ Username available")
+
     if st.button("Send OTP"):
         if username and email and password:
             if password == confirm_password:
-                otp = str(random.randint(100000, 999999))
-                if send_email_otp(email, otp):
-                    st.session_state['reg_otp'] = otp
-                    st.session_state['reg_data'] = (username, password, role, email)
-                    st.success("OTP sent to your email!")
+                if not username_exists(username):  # Additional check
+                    otp = str(random.randint(100000, 999999))
+                    if send_email_otp(email, otp):
+                        st.session_state['reg_otp'] = otp
+                        st.session_state['reg_data'] = (username, password, role, email)
+                        st.success("OTP sent to your email!")
+                    else:
+                        st.error("Failed to send OTP. Please try again.")
                 else:
-                    st.error("Failed to send OTP. Please try again.")
+                    st.error("Username already exists. Please choose another.")
             else:
                 st.error("Passwords do not match!")
         else:
