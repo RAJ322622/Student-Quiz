@@ -298,12 +298,18 @@ elif choice == "Take Quiz":
     else:
         username = st.session_state.username
         
-        # Initialize session state variables if they don't exist
+        # Initialize session state variables
         if 'usn' not in st.session_state:
             st.session_state.usn = ""
         if 'section' not in st.session_state:
             st.session_state.section = ""
-        
+        if 'quiz_start_time' not in st.session_state:
+            st.session_state.quiz_start_time = 0
+        if 'camera_active' not in st.session_state:
+            st.session_state.camera_active = False
+        if 'quiz_submitted' not in st.session_state:
+            st.session_state.quiz_submitted = False
+            
         # Only show USN/Section inputs if not already provided
         if not st.session_state.usn or not st.session_state.section:
             with st.form("quiz_start_form"):
@@ -315,10 +321,14 @@ elif choice == "Take Quiz":
                         st.session_state.section = section.strip().upper()
                         st.session_state.camera_active = True
                         st.session_state.quiz_start_time = time.time()
+                        st.session_state.video_recorder = VideoRecorder()
+                        add_active_student(username)
                         st.rerun()
                     else:
                         st.error("Please enter both USN and Section")
-            return  # Exit early if USN/section not provided yet
+            return
+        
+        # Rest of your quiz implementation...
         
         # Rest of your quiz code...
 
