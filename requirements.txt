@@ -1,8 +1,9 @@
-streamlit
-pandas
-streamlit-webrtc
-streamlit-autorefresh
-gTTS
-opencv-python-headless
-sendgrid
-send_email
+streamlit==1.32.2
+streamlit-webrtc==0.46.2
+opencv-python-headless==4.9.0.80
+gTTS==2.5.1
+moviepy==1.0.3
+Pillow==10.2.0
+numpy==1.26.4
+pandas==2.2.1
+email-validator==2.1.0.post1
