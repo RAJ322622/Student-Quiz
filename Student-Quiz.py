@@ -463,20 +463,37 @@ elif choice == "Professor Panel":
     tab1, tab2 = st.tabs(["Professor Login", "Professor Registration"])
     
     with tab1:  # Login tab
-        if not st.session_state.prof_verified:
+        if not st.session_state.get('prof_verified', False):
             prof_id = st.text_input("Professor ID", key="prof_id_login")
             prof_pass = st.text_input("Professor Password", type="password", key="prof_pass_login")
             
             if st.button("Login as Professor"):
                 conn = get_db_connection()
-                cursor = conn.execute("SELECT password, role FROM users WHERE username = ?", (prof_id,))
+                cursor = conn.execute("SELECT password, role, email FROM users WHERE username = ?", (prof_id,))
                 prof_data = cursor.fetchone()
                 conn.close()
                 
                 if prof_data and prof_data[1] == "professor" and prof_data[0] == hash_password(prof_pass):
                     st.session_state.prof_verified = True
                     st.session_state.username = prof_id
+                    st.session_state.role = "professor"
                     st.success(f"Login successful! Welcome Professor {prof_id}")
+                    
+                    # Send login notification email
+                    try:
+                        msg = EmailMessage()
+                        msg.set_content(f"Professor login detected:\n\nUsername: {prof_id}\nTime: {datetime.now()}")
+                        msg['Subject'] = "Professor Login Notification"
+                        msg['From'] = "rajkumar.k0322@gmail.com"
+                        msg['To'] = prof_data[2]  # Professor's email
+
+                        server = smtplib.SMTP('smtp.gmail.com', 587)
+                        server.starttls()
+                        server.login("rajkumar.k0322@gmail.com", "kcxf lzrq xnts xlng")
+                        server.send_message(msg)
+                        server.quit()
+                    except Exception as e:
+                        st.error(f"Login notification failed: {e}")
                     
                     # Create professor-specific CSV file path
                     PROF_CSV_FILE = f"prof_{prof_id}_results.csv"
@@ -487,12 +504,12 @@ elif choice == "Professor Panel":
             st.success(f"Welcome Professor {st.session_state.username}!")
             
             # Professor dashboard after login
-            PROF_CSV_FILE = st.session_state.prof_csv_file
+            PROF_CSV_FILE = st.session_state.get('prof_csv_file', "prof_quiz_results.csv")
             if os.path.exists(PROF_CSV_FILE):
                 with open(PROF_CSV_FILE, "rb") as file:
                     st.download_button("\U0001F4E5 Download Results CSV", file, 
-                                      f"{st.session_state.username}_quiz_results.csv", 
-                                      mime="text/csv")
+                                    f"{st.session_state.username}_quiz_results.csv", 
+                                    mime="text/csv")
                 
                 # Show results preview
                 st.subheader("Your Quiz Results Preview")
@@ -509,56 +526,62 @@ elif choice == "Professor Panel":
     
     with tab2:  # Registration tab
         st.subheader("Professor Registration")
+        st.warning("Professor registration requires institutional verification.")
         
-        # Hidden RRCE- prefix (completely invisible to users)
-        prof_prefix = "RRCE-"
+        # Professor details collection
+        full_name = st.text_input("Full Name")
+        designation = st.text_input("Designation")
+        department = st.selectbox("Department", ["CSE", "ISE", "ECE", "EEE", "MECH", "CIVIL"])
+        institutional_email = st.text_input("Institutional Email", help="Must be your college email")
         
-        # Display instruction about the prefix
-        st.markdown("""
-        <div style='background-color:#f0f2f6; padding:10px; border-radius:5px; margin-bottom:10px;'>
-        <b>Note:</b> Your Professor ID will automatically start with <code>RRCE-</code>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Input for the unique part only
-        prof_id_suffix = st.text_input("Enter your unique ID suffix", 
-                                     help="This will be combined with RRCE- to create your full Professor ID")
-        
-        # Combine prefix and suffix
-        prof_id = f"{prof_prefix}{prof_id_suffix}"
-        
-        prof_email = st.text_input("Institutional Email", key="prof_email_reg")
-        prof_pass = st.text_input("Create Password", type="password", key="prof_pass_reg")
-        confirm_pass = st.text_input("Confirm Password", type="password", key="confirm_pass_reg")
-        
-        if st.button("Register as Professor"):
-            # Validation checks
-            if not prof_id_suffix:
-                st.error("Please enter your unique ID suffix")
-            elif not prof_email.endswith("@gmail.com"):
-                st.error("Please use your institutional email (@gmail.com)")
-            elif len(prof_pass) < 8:
-                st.error("Password must be at least 8 characters")
-            elif prof_pass != confirm_pass:
-                st.error("Passwords do not match")
-            else:
-                # Check if professor ID already exists
+        if st.button("Request Professor Account"):
+            if full_name and designation and department and institutional_email:
+                # Generate professor credentials
+                prof_id = f"RRCE-{random.randint(10000, 99999)}"
+                prof_password = str(random.randint(100000, 999999))
+                
+                # Register professor
                 conn = get_db_connection()
-                cursor = conn.execute("SELECT username FROM users WHERE username = ?", (prof_id,))
-                if cursor.fetchone():
-                    st.error("This Professor ID already exists")
-                    conn.close()
-                else:
-                    conn.close()
-                    # Send OTP for verification
-                    otp = str(random.randint(100000, 999999))
-                    if send_email_otp(prof_email, otp):
-                        st.session_state['prof_otp'] = otp
-                        st.session_state['prof_reg_data'] = (prof_id, prof_pass, "professor", prof_email)
-                        st.success("OTP sent to your email!")
-                    else:
-                        st.error("Failed to send OTP")
+                try:
+                    conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
+                             (prof_id, hash_password(prof_password), "professor", institutional_email))
+                    conn.commit()
+                    
+                    # Send credentials via email
+                    try:
+                        msg = EmailMessage()
+                        msg.set_content(f"""Dear Professor {full_name},
 
+Your professor account has been created with the following credentials:
+
+Professor ID: {prof_id}
+Password: {prof_password}
+
+Please keep these credentials secure and do not share with students.
+
+You can now login to the Secure Quiz App professor panel.
+
+Best regards,
+Secure Quiz App Team""")
+                        msg['Subject'] = "Your Professor Account Credentials"
+                        msg['From'] = "rajkumar.k0322@gmail.com"
+                        msg['To'] = institutional_email
+
+                        server = smtplib.SMTP('smtp.gmail.com', 587)
+                        server.starttls()
+                        server.login("rajkumar.k0322@gmail.com", "kcxf lzrq xnts xlng")
+                        server.send_message(msg)
+                        server.quit()
+                        
+                        st.success("Professor account created! Your credentials have been sent to your institutional email.")
+                    except Exception as e:
+                        st.error(f"Account created but failed to send email: {e}")
+                except sqlite3.IntegrityError:
+                    st.error("Professor with this email already exists!")
+                finally:
+                    conn.close()
+            else:
+                st.error("Please fill all the details")
 elif choice == "Professor Monitoring Panel":
     if not st.session_state.prof_verified:
         st.warning("Professor access only. Please login via 'Professor Panel' to verify.")
