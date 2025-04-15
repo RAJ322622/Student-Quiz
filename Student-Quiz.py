@@ -520,7 +520,7 @@ elif choice == "Professor Panel":
         # Display instruction about the prefix
         st.markdown("""
         <div style='background-color:#f0f2f6; padding:10px; border-radius:5px; margin-bottom:10px;'>
-        <b>Note:</b> Your Professor ID will automatically start with <code>RRCE-</code>
+        <b>Note:</b> Your Professor ID will automatically start with <code></code>
         </div>
         """, unsafe_allow_html=True)
         
