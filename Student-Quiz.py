@@ -442,7 +442,7 @@ elif choice == "Professor Panel":
                         os.makedirs(st.session_state.prof_dir, exist_ok=True)
                     else:
                         st.error("Invalid Professor credentials")
-            
+           
         else:
             st.success(f"Welcome Professor {st.session_state.username}!")
             st.subheader("Student Results Management")
