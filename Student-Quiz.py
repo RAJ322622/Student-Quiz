@@ -426,87 +426,103 @@ elif choice == "Take Quiz":
 
 
 
-elif choice == "Change Password":
-    if not st.session_state.logged_in:
-        st.warning("Please login first!")
-    else:
-        username = st.session_state.username
-        old_pass = st.text_input("Old Password", type="password")
-        new_pass = st.text_input("New Password", type="password")
-        if st.button("Change Password"):
-            if not authenticate_user(username, old_pass):
-                st.error("Old password is incorrect!")
-            else:
+elif choice == "Professor Panel":
+    st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
+    
+    # Professor registration and login tabs
+    tab1, tab2 = st.tabs(["Professor Login", "Professor Registration"])
+    
+    with tab1:  # Login tab
+        if not st.session_state.prof_verified:
+            prof_id = st.text_input("Professor ID", key="prof_id_login")
+            prof_pass = st.text_input("Professor Password", type="password", key="prof_pass_login")
+            
+            if st.button("Login as Professor"):
                 conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute("SELECT change_count FROM password_changes WHERE username = ?", (username,))
-                record = cursor.fetchone()
-                if record and record[0] >= 2:
-                    st.error("Password can only be changed twice.")
-                else:
-                    conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                                 (hash_password(new_pass), username))
-                    if record:
-                        conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?",
-                                     (username,))
-                    else:
-                        conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)",
-                                     (username,))
-                    conn.commit()
-                    st.success("Password updated successfully.")
+                cursor = conn.execute("SELECT password, role FROM users WHERE username = ?", (prof_id,))
+                prof_data = cursor.fetchone()
                 conn.close()
-
-with tab2:  # Registration tab
-    st.subheader("Professor Registration")
-    
-    # Hidden RRCE- prefix (completely invisible to users)
-    prof_prefix = "RRCE-"
-    
-    # Display instruction about the prefix
-    st.markdown("""
-    <div style='background-color:#f0f2f6; padding:10px; border-radius:5px; margin-bottom:10px;'>
-    <b>Note:</b> Your Professor ID will automatically start with <code>RRCE-</code>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Input for the unique part only
-    prof_id_suffix = st.text_input("Enter your unique ID suffix", 
-                                 help="This will be combined with RRCE- to create your full Professor ID")
-    
-    # Combine prefix and suffix
-    prof_id = f"{prof_prefix}{prof_id_suffix}"
-    
-    prof_email = st.text_input("Institutional Email", key="prof_email_reg")
-    prof_pass = st.text_input("Create Password", type="password", key="prof_pass_reg")
-    confirm_pass = st.text_input("Confirm Password", type="password", key="confirm_pass_reg")
-    
-    if st.button("Register as Professor"):
-        # Validation checks
-        if not prof_id_suffix:
-            st.error("Please enter your unique ID suffix")
-        elif not prof_email.endswith(".edu"):
-            st.error("Please use your institutional email (.edu)")
-        elif len(prof_pass) < 8:
-            st.error("Password must be at least 8 characters")
-        elif prof_pass != confirm_pass:
-            st.error("Passwords do not match")
+                
+                if prof_data and prof_data[1] == "professor" and prof_data[0] == hash_password(prof_pass):
+                    st.session_state.prof_verified = True
+                    st.session_state.username = prof_id
+                    st.success("Professor login successful!")
+                else:
+                    st.error("Invalid Professor ID or password")
         else:
-            # Check if professor ID already exists
-            conn = get_db_connection()
-            cursor = conn.execute("SELECT username FROM users WHERE username = ?", (prof_id,))
-            if cursor.fetchone():
-                st.error("This Professor ID already exists")
-                conn.close()
+            st.success(f"Welcome Professor {st.session_state.username}!")
+            
+            # Professor dashboard after login
+            if os.path.exists(PROF_CSV_FILE):
+                with open(PROF_CSV_FILE, "rb") as file:
+                    st.download_button("\U0001F4E5 Download Results CSV", file, "prof_quiz_results.csv", mime="text/csv")
+                
+                # Show results preview
+                st.subheader("Quiz Results Preview")
+                prof_df = pd.read_csv(PROF_CSV_FILE)
+                st.dataframe(prof_df)
             else:
-                conn.close()
-                # Send OTP for verification
-                otp = str(random.randint(100000, 999999))
-                if send_email_otp(prof_email, otp):
-                    st.session_state['prof_otp'] = otp
-                    st.session_state['prof_reg_data'] = (prof_id, prof_pass, "professor", prof_email)
-                    st.success("OTP sent to your email!")
+                st.warning("No results available yet.")
+            
+            if st.button("Logout Professor"):
+                st.session_state.prof_verified = False
+                st.session_state.username = ""
+                st.experimental_rerun()
+    
+    with tab2:  # Registration tab
+        st.subheader("Professor Registration")
+        
+        # Split the professor ID input into fixed prefix and customizable part
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            prof_prefix = st.text_input("Prefix", value="RRCE-", disabled=True)
+        with col2:
+            prof_id_suffix = st.text_input("Your Unique ID", help="Enter your unique identifier after RRCE-")
+        
+        prof_id = f"{prof_prefix}{prof_id_suffix}"
+        prof_email = st.text_input("Institutional Email", key="prof_email_reg")
+        prof_pass = st.text_input("Create Password", type="password", key="prof_pass_reg")
+        confirm_pass = st.text_input("Confirm Password", type="password", key="confirm_pass_reg")
+        
+        if st.button("Register as Professor"):
+            # Validation checks
+            if not prof_id_suffix:
+                st.error("Please enter your unique ID after RRCE-")
+            elif not prof_email.endswith(".edu"):
+                st.error("Please use your institutional email (.edu)")
+            elif len(prof_pass) < 8:
+                st.error("Password must be at least 8 characters")
+            elif prof_pass != confirm_pass:
+                st.error("Passwords do not match")
+            else:
+                # Check if professor ID already exists
+                conn = get_db_connection()
+                cursor = conn.execute("SELECT username FROM users WHERE username = ?", (prof_id,))
+                if cursor.fetchone():
+                    st.error("This Professor ID already exists")
+                    conn.close()
                 else:
-                    st.error("Failed to send OTP")
+                    conn.close()
+                    # Send OTP for verification
+                    otp = str(random.randint(100000, 999999))
+                    if send_email_otp(prof_email, otp):
+                        st.session_state['prof_otp'] = otp
+                        st.session_state['prof_reg_data'] = (prof_id, prof_pass, "professor", prof_email)
+                        st.success("OTP sent to your email!")
+                    else:
+                        st.error("Failed to send OTP")
+        
+        if 'prof_otp' in st.session_state:
+            otp_entered = st.text_input("Enter OTP", key="prof_otp_input")
+            if st.button("Verify OTP"):
+                if otp_entered == st.session_state['prof_otp']:
+                    prof_id, prof_pass, role, prof_email = st.session_state['prof_reg_data']
+                    register_user(prof_id, prof_pass, role, prof_email)
+                    del st.session_state['prof_otp']
+                    del st.session_state['prof_reg_data']
+                    st.success("Professor registration successful! Please login.")
+                else:
+                    st.error("Incorrect OTP")
 
 elif choice == "Professor Monitoring Panel":
     if not st.session_state.prof_verified:
