@@ -539,7 +539,7 @@ elif choice == "Professor Panel":
             # Validation checks
             if not prof_id_suffix:
                 st.error("Please enter your unique ID suffix")
-            elif not prof_email.endswith(".edu"):
+            elif not prof_email.endswith("@gmail.com"):
                 st.error("Please use your institutional email (@gmail.com)")
             elif len(prof_pass) < 8:
                 st.error("Password must be at least 8 characters")
