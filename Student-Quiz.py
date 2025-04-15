@@ -512,56 +512,56 @@ elif choice == "Professor Panel":
                 st.experimental_rerun()
     
     with tab2:  # Registration tab
-    st.subheader("Professor Registration")
-    
-    # Hidden RRCE- prefix (completely invisible to users)
-    prof_prefix = "RRCE-"
-    
-    # Display instruction about the prefix
-    st.markdown("""
-    <div style='background-color:#f0f2f6; padding:10px; border-radius:5px; margin-bottom:10px;'>
-    <b>Note:</b> Your Professor ID will automatically start with <code>RRCE-</code>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Input for the unique part only
-    prof_id_suffix = st.text_input("Enter your unique ID suffix", 
-                                 help="This will be combined with RRCE- to create your full Professor ID")
-    
-    # Combine prefix and suffix
-    prof_id = f"{prof_prefix}{prof_id_suffix}"
-    
-    prof_email = st.text_input("Institutional Email", key="prof_email_reg")
-    prof_pass = st.text_input("Create Password", type="password", key="prof_pass_reg")
-    confirm_pass = st.text_input("Confirm Password", type="password", key="confirm_pass_reg")
-    
-    if st.button("Register as Professor"):
-        # Validation checks
-        if not prof_id_suffix:
-            st.error("Please enter your unique ID suffix")
-        elif not prof_email.endswith(".edu"):
-            st.error("Please use your institutional email (.edu)")
-        elif len(prof_pass) < 8:
-            st.error("Password must be at least 8 characters")
-        elif prof_pass != confirm_pass:
-            st.error("Passwords do not match")
-        else:
-            # Check if professor ID already exists
-            conn = get_db_connection()
-            cursor = conn.execute("SELECT username FROM users WHERE username = ?", (prof_id,))
-            if cursor.fetchone():
-                st.error("This Professor ID already exists")
-                conn.close()
+        st.subheader("Professor Registration")
+        
+        # Hidden RRCE- prefix (completely invisible to users)
+        prof_prefix = "RRCE-"
+        
+        # Display instruction about the prefix
+        st.markdown("""
+        <div style='background-color:#f0f2f6; padding:10px; border-radius:5px; margin-bottom:10px;'>
+        <b>Note:</b> Your Professor ID will automatically start with <code>RRCE-</code>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Input for the unique part only
+        prof_id_suffix = st.text_input("Enter your unique ID suffix", 
+                                     help="This will be combined with RRCE- to create your full Professor ID")
+        
+        # Combine prefix and suffix
+        prof_id = f"{prof_prefix}{prof_id_suffix}"
+        
+        prof_email = st.text_input("Institutional Email", key="prof_email_reg")
+        prof_pass = st.text_input("Create Password", type="password", key="prof_pass_reg")
+        confirm_pass = st.text_input("Confirm Password", type="password", key="confirm_pass_reg")
+        
+        if st.button("Register as Professor"):
+            # Validation checks
+            if not prof_id_suffix:
+                st.error("Please enter your unique ID suffix")
+            elif not prof_email.endswith(".edu"):
+                st.error("Please use your institutional email (.edu)")
+            elif len(prof_pass) < 8:
+                st.error("Password must be at least 8 characters")
+            elif prof_pass != confirm_pass:
+                st.error("Passwords do not match")
             else:
-                conn.close()
-                # Send OTP for verification
-                otp = str(random.randint(100000, 999999))
-                if send_email_otp(prof_email, otp):
-                    st.session_state['prof_otp'] = otp
-                    st.session_state['prof_reg_data'] = (prof_id, prof_pass, "professor", prof_email)
-                    st.success("OTP sent to your email!")
+                # Check if professor ID already exists
+                conn = get_db_connection()
+                cursor = conn.execute("SELECT username FROM users WHERE username = ?", (prof_id,))
+                if cursor.fetchone():
+                    st.error("This Professor ID already exists")
+                    conn.close()
                 else:
-                    st.error("Failed to send OTP")
+                    conn.close()
+                    # Send OTP for verification
+                    otp = str(random.randint(100000, 999999))
+                    if send_email_otp(prof_email, otp):
+                        st.session_state['prof_otp'] = otp
+                        st.session_state['prof_reg_data'] = (prof_id, prof_pass, "professor", prof_email)
+                        st.success("OTP sent to your email!")
+                    else:
+                        st.error("Failed to send OTP")
 
 elif choice == "View Recorded Video":
     st.subheader("Recorded Quiz Videos")
