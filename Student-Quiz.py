@@ -466,24 +466,7 @@ elif choice == "Change Password":
                     st.success("Password updated successfully.")
                 conn.close()
 
-elif choice == "Professor Panel":
-    st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
-    if not st.session_state.prof_verified:
-        prof_user = st.text_input("Professor Username")
-        prof_pass = st.text_input("Professor Password", type="password")
-        if st.button("Verify Professor"):
-            if prof_user.strip().lower() == "raj kumar" and prof_pass.strip().lower() == "raj kumar":
-                st.session_state.prof_verified = True
-                st.success("Professor verified! You can now access results.")
-            else:
-                st.error("Access denied. Invalid professor credentials.")
-    else:
-        st.success("Welcome Professor Raj Kumar!")
-        if os.path.exists(PROF_CSV_FILE):
-            with open(PROF_CSV_FILE, "rb") as file:
-                st.download_button("\U0001F4E5 Download Results CSV", file, "prof_quiz_results.csv", mime="text/csv")
-        else:
-            st.warning("No results available yet.")
+
 
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
