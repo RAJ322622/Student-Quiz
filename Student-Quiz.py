@@ -122,8 +122,7 @@ def get_live_students():
     except:
         return []
 
-# Updated VideoProcessor class with recording functionality
-# Update the VideoProcessor class and Take Quiz section
+# Updated VideoProcessor class with proper recording handling
 class VideoProcessor(VideoTransformerBase):
     def __init__(self):
         self.frames = []
@@ -138,6 +137,9 @@ class VideoProcessor(VideoTransformerBase):
         return frame
     
     def on_ended(self):
+        self.save_recording()
+        
+    def save_recording(self):
         if self.frames and 'username' in st.session_state:
             filename = f"{st.session_state.username}_{st.session_state.recording_start_time}.mp4"
             filepath = os.path.join(RECORDING_DIR, filename)
@@ -335,30 +337,40 @@ elif choice == "Take Quiz":
                 if st.session_state.camera_active and not st.session_state.quiz_submitted:
                     st.markdown("<span style='color:green;'>🟢 Webcam is ON (Recording automatically started)</span>", unsafe_allow_html=True)
                     
-                    # Try to automatically start the camera
-                    try:
-                        webrtc_ctx = webrtc_streamer(
-                            key="camera",
-                            mode=WebRtcMode.SENDRECV,
-                            media_stream_constraints={"video": True, "audio": False},
-                            video_processor_factory=VideoProcessor,
-                            async_processing=True,
-                            on_disconnect=lambda: remove_active_student(username),
-                            rtc_configuration={
-                                "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
-                            }
-                        )
-                        
-                        if not webrtc_ctx.state.playing:
-                            st.warning("Please allow camera permissions to continue with the quiz.")
-                    except Exception as e:
-                        st.error(f"Camera error: {str(e)}")
-                        st.info("Please refresh the page and allow camera permissions when prompted.")
+                    # Initialize webrtc_streamer
+                    webrtc_ctx = webrtc_streamer(
+                        key="quiz_recording",
+                        mode=WebRtcMode.SENDRECV,
+                        media_stream_constraints={
+                            "video": {
+                                "width": {"ideal": 640},
+                                "height": {"ideal": 480},
+                                "facingMode": "user"
+                            },
+                            "audio": False
+                        },
+                        video_processor_factory=VideoProcessor,
+                        async_processing=True,
+                        rtc_configuration={
+                            "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+                        }
+                    )
+                    
+                    # Handle camera state
+                    if webrtc_ctx.state.playing:
+                        st.session_state.camera_active = True
+                    else:
+                        st.warning("Camera is not active. Please allow camera permissions to continue.")
+                        st.info("If the camera doesn't start automatically, please refresh the page and allow permissions when prompted.")
 
+                # Rest of your quiz questions and submission logic...
                 for idx, question in enumerate(QUESTIONS):
                     st.markdown(f"**Q{idx+1}:** {question['question']}")
                     ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
                     answers[question['question']] = ans
+
+                submit_btn = st.button("Submit Quiz")
+                # ... rest of your submission logic
 
 
                 submit_btn = st.button("Submit Quiz")
