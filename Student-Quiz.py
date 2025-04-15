@@ -7,6 +7,7 @@ import os
 import json
 from datetime import datetime
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, VideoTransformerBase
+from streamlit_autorefresh import st_autorefresh
 import av
 import smtplib
 from email.message import EmailMessage
@@ -30,6 +31,8 @@ def send_email_otp(to_email, otp):
         st.error(f"Failed to send OTP: {e}")
         return False
 
+
+
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
 ACTIVE_FILE = "active_students.json"
@@ -41,14 +44,18 @@ for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_sub
     if key not in st.session_state:
         st.session_state[key] = False if key not in ["username", "usn", "section"] else ""
 
+
 def get_db_connection():
     conn = sqlite3.connect('quiz_app.db')
-    conn.execute('''CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE,
-                    password TEXT,
-                    role TEXT DEFAULT 'student')''')
 
+    # Create 'users' table if it doesn't exist
+    conn.execute('''CREATE TABLE IF NOT EXISTS users (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        username TEXT UNIQUE,
+                        password TEXT,
+                        role TEXT DEFAULT 'student')''')
+
+    # ✅ Add email column if it doesn't exist
     cursor = conn.cursor()
     cursor.execute("PRAGMA table_info(users)")
     columns = [column[1] for column in cursor.fetchall()]
@@ -56,22 +63,51 @@ def get_db_connection():
         conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
         conn.commit()
 
+    # Create other tables
     conn.execute('''CREATE TABLE IF NOT EXISTS password_changes (
-                    username TEXT PRIMARY KEY,
-                    change_count INTEGER DEFAULT 0)''')
+                        username TEXT PRIMARY KEY,
+                        change_count INTEGER DEFAULT 0)''')
     conn.execute('''CREATE TABLE IF NOT EXISTS quiz_attempts (
-                    username TEXT PRIMARY KEY,
-                    attempt_count INTEGER DEFAULT 0)''')
+                        username TEXT PRIMARY KEY,
+                        attempt_count INTEGER DEFAULT 0)''')
+
     return conn
 
+
+def add_email_column_if_not_exists():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [col[1] for col in cursor.fetchall()]
+    if "email" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        conn.commit()
+    conn.close()
+
+
+
+
+def add_email_column_if_not_exists():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [column[1] for column in cursor.fetchall()]
+    if "email" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        conn.commit()
+    conn.close()
+
+
+# Password hashing
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
+# Register user
 def register_user(username, password, role, email):
     conn = get_db_connection()
     try:
-        conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
-                     (username, hash_password(password), role, email))
+        conn.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+                     (username, hash_password(password), role))
         conn.commit()
         st.success("Registration successful! Please login.")
     except sqlite3.IntegrityError:
@@ -79,6 +115,8 @@ def register_user(username, password, role, email):
     finally:
         conn.close()
 
+
+# Authenticate user
 def authenticate_user(username, password):
     conn = get_db_connection()
     cursor = conn.execute("SELECT password FROM users WHERE username = ?", (username,))
@@ -86,6 +124,7 @@ def authenticate_user(username, password):
     conn.close()
     return user and user[0] == hash_password(password)
 
+# Get user role
 def get_user_role(username):
     conn = get_db_connection()
     cursor = conn.execute("SELECT role FROM users WHERE username = ?", (username,))
@@ -93,6 +132,7 @@ def get_user_role(username):
     conn.close()
     return role[0] if role else "student"
 
+# Active student tracking
 def add_active_student(username):
     try:
         with open(ACTIVE_FILE, "r") as f:
@@ -114,27 +154,6 @@ def remove_active_student(username):
     except:
         pass
 
-def send_email(to_email, subject, body):
-    try:
-        msg = EmailMessage()
-        msg['Subject'] = subject
-        msg['From'] = "rajkumar.k0322@gmail.com"
-        msg['To'] = to_email
-
-        # Add both plain text and HTML versions
-        msg.set_content("Please view this email in an HTML-compatible client")
-        msg.add_alternative(body, subtype='html')
-
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login("rajkumar.k0322@gmail.com", "kcxf lzrq xnts xlng")  # App Password
-        server.send_message(msg)
-        server.quit()
-        return True
-    except Exception as e:
-        st.error(f"Failed to send email: {e}")
-        return False 
-
 def get_live_students():
     try:
         with open(ACTIVE_FILE, "r") as f:
@@ -142,96 +161,16 @@ def get_live_students():
     except:
         return []
 
-class VideoProcessor(VideoTransformerBase):
-    def __init__(self):
-        self.frames = []
-        self.recording_started = False
-        
-    def recv(self, frame):
-        if not self.recording_started:
-            self.recording_started = True
-            st.session_state.recording_start_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
-        self.frames.append(frame)
-        return frame
-    
-    def on_ended(self):
-        self.save_recording()
-        
-    def save_recording(self):
-        if self.frames and 'username' in st.session_state:
-            filename = f"{st.session_state.username}_{st.session_state.recording_start_time}.mp4"
-            filepath = os.path.join(RECORDING_DIR, filename)
-            
-            container = av.open(filepath, mode='w')
-            stream = container.add_stream('h264', rate=30)
-            stream.width = self.frames[0].width
-            stream.height = self.frames[0].height
-            
-            for frame in self.frames:
-                img = frame.to_ndarray(format="bgr24")
-                av_frame = av.VideoFrame.from_ndarray(img, format="bgr24")
-                for packet in stream.encode(av_frame):
-                    container.mux(packet)
-                    
-            for packet in stream.encode():
-                container.mux(packet)
-                
-            container.close()
-            st.session_state.last_recording = filename
-
+# Dummy question bank
 QUESTIONS = [
-    {
-        "question": "Which keyword is used to define a constant in C?",
-        "options": ["const", "#define", "static", "let"],
-        "answer": "const"
-    },
-    {
-        "question": "What is the output of `print(3 * 'a' in Python)?",
-        "options": ["aaa", "a a a", "Error", "True"],
-        "answer": "aaa"
-    },
-    {
-        "question": "Which data structure uses FIFO (First-In-First-Out)?",
-        "options": ["Stack", "Queue", "Array", "Linked List"],
-        "answer": "Queue"
-    },
-    {
-        "question": "What does `sizeof(int)` return in a 32-bit system?",
-        "options": ["2", "4", "8", "Compiler-dependent"],
-        "answer": "4"
-    },
-    {
-        "question": "Which Python function converts a string to lowercase?",
-        "options": ["str.lower()", "string.lower()", "toLower()", "lowercase()"],
-        "answer": "str.lower()"
-    },
-    {
-        "question": "What is the time complexity of binary search?",
-        "options": ["O(n)", "O(log n)", "O(n²)", "O(1)"],
-        "answer": "O(log n)"
-    },
-    {
-        "question": "Which operator is used for pointer dereferencing in C?",
-        "options": ["&", "*", "->", "::"],
-        "answer": "*"
-    },
-    {
-        "question": "What does `'hello'.replace('l', 'x')` return in Python?",
-        "options": ["hexxo", "hexlo", "helxo", "Error"],
-        "answer": "hexxo"
-    },
-    {
-        "question": "Which header file is needed for `printf()` in C?",
-        "options": ["<stdio.h>", "<stdlib.h>", "<math.h>", "<string.h>"],
-        "answer": "<stdio.h>"
-    },
-    {
-        "question": "What is the default return type of a function in C if not specified?",
-        "options": ["void", "int", "char", "float"],
-        "answer": "int"
-    }
+    {"question": "What is the format specifier for an integer in C?", "options": ["%c", "%d", "%f", "%s"], "answer": "%d"},
+    {"question": "Which loop is used when the number of iterations is known?", "options": ["while", "do-while", "for", "if"], "answer": "for"},
 ]
+
+# Video processor
+class VideoProcessor(VideoTransformerBase):
+    def recv(self, frame):
+        return frame
 
 # UI Starts
 st.title("\U0001F393 Secure Quiz App with Webcam \U0001F4F5")
@@ -256,12 +195,24 @@ if choice == "Register":
     if st.button("Verify and Register"):
         if otp_entered == st.session_state.get('reg_otp'):
             username, password_hashed, role, email = st.session_state['reg_data']
-            register_user(username, password_hashed, role, email)
+            conn = get_db_connection()
+            try:
+                conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
+                         (username, password_hashed, role, email))
+                conn.commit()
+                st.success("Registration successful! Please login.")
+            except sqlite3.IntegrityError:
+                st.error("Username or Email already exists!")
+            conn.close()
+
         else:
             st.error("Incorrect OTP!")
 
+
 elif choice == "Login":
     st.subheader("Login")
+
+    # ---------- Login Form ----------
     username = st.text_input("Username", key="login_username")
     password = st.text_input("Password", type="password", key="login_password")
     if st.button("Login"):
@@ -272,6 +223,7 @@ elif choice == "Login":
         else:
             st.error("Invalid username or password.")
 
+    # ---------- Forgot Password ----------
     st.markdown("### Forgot Password?")
     forgot_email = st.text_input("Enter registered email", key="forgot_email_input")
     if st.button("Send Reset OTP"):
@@ -289,6 +241,7 @@ elif choice == "Login":
         else:
             st.error("Email not registered.")
 
+    # ---------- Reset Password ----------
     if 'reset_otp' in st.session_state and 'reset_email' in st.session_state:
         st.markdown("### Reset Your Password")
         entered_otp = st.text_input("Enter OTP to reset password", key="reset_otp_input")
@@ -304,13 +257,18 @@ elif choice == "Login":
                     conn.commit()
                     conn.close()
                     st.success("Password reset successfully! You can now log in.")
+
+                    # Clear session
                     del st.session_state['reset_otp']
                     del st.session_state['reset_email']
                     del st.session_state['reset_user']
                 else:
-                    st.error("Passwords do not match.")
+                    st.error("Passwords do not match. Please try again.")
             else:
-                st.error("Incorrect OTP.")
+                st.error("Incorrect OTP. Please try again.")
+
+
+
 
 elif choice == "Take Quiz":
     if not st.session_state.logged_in:
@@ -335,11 +293,9 @@ elif choice == "Take Quiz":
                 score = 0
                 if "quiz_start_time" not in st.session_state:
                     st.session_state.quiz_start_time = time.time()
-                    add_active_student(username)
-                    st.session_state.camera_active = True
 
                 time_elapsed = int(time.time() - st.session_state.quiz_start_time)
-                time_limit = 25 * 60
+                time_limit = 25 * 60  # 25 minutes
                 time_left = time_limit - time_elapsed
 
                 if time_left <= 0:
@@ -351,32 +307,18 @@ elif choice == "Take Quiz":
 
                 answers = {}
 
+                if not st.session_state.quiz_submitted and not st.session_state.camera_active:
+                    add_active_student(username)
+                    st.session_state.camera_active = True
+
                 if st.session_state.camera_active and not st.session_state.quiz_submitted:
-                    st.markdown("<span style='color:green;'>🟢 Webcam is ON (Recording automatically started)</span>", unsafe_allow_html=True)
-                    
-                    webrtc_ctx = webrtc_streamer(
-                        key="quiz_recording",
+                    st.markdown("<span style='color:red;'>\U0001F7E2 Webcam is ON</span>", unsafe_allow_html=True)
+                    webrtc_streamer(
+                        key="camera",
                         mode=WebRtcMode.SENDRECV,
-                        media_stream_constraints={
-                            "video": {
-                                "width": {"ideal": 640},
-                                "height": {"ideal": 480},
-                                "facingMode": "user"
-                            },
-                            "audio": False
-                        },
+                        media_stream_constraints={"video": True, "audio": False},
                         video_processor_factory=VideoProcessor,
-                        async_processing=True,
-                        rtc_configuration={
-                            "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
-                        }
                     )
-                    
-                    if webrtc_ctx.state.playing:
-                        st.session_state.camera_active = True
-                    else:
-                        st.warning("Camera is not active. Please allow camera permissions to continue.")
-                        st.info("If the camera doesn't start automatically, please refresh the page and allow permissions when prompted.")
 
                 for idx, question in enumerate(QUESTIONS):
                     st.markdown(f"**Q{idx+1}:** {question['question']}")
@@ -398,6 +340,8 @@ elif choice == "Take Quiz":
                         new_row = pd.DataFrame([[username, hash_password(username), st.session_state.usn, st.session_state.section, score, time_taken, datetime.now()]],
                                                columns=["Username", "Hashed_Password", "USN", "Section", "Score", "Time_Taken", "Timestamp"])
 
+                        # Append to professor's CSV
+                                                # Append to professor's CSV
                         if os.path.exists(PROF_CSV_FILE):
                             prof_df = pd.read_csv(PROF_CSV_FILE)
                             prof_df = pd.concat([prof_df, new_row], ignore_index=True)
@@ -405,6 +349,7 @@ elif choice == "Take Quiz":
                             prof_df = new_row
                         prof_df.to_csv(PROF_CSV_FILE, index=False)
 
+                        # Save to student section-wise CSV
                         section_file = f"{st.session_state.section}_results.csv"
                         if os.path.exists(section_file):
                             sec_df = pd.read_csv(section_file)
@@ -413,6 +358,7 @@ elif choice == "Take Quiz":
                             sec_df = new_row
                         sec_df.to_csv(section_file, index=False)
 
+                        # Update attempts
                         if record:
                             cur.execute("UPDATE quiz_attempts SET attempt_count = attempt_count + 1 WHERE username = ?", (username,))
                         else:
@@ -420,15 +366,15 @@ elif choice == "Take Quiz":
                         conn.commit()
                         conn.close()
 
-                        email_conn = get_db_connection()
-                        email_result = email_conn.execute("SELECT email FROM users WHERE username = ?", (username,)).fetchone()
-                        email_conn.close()
-                        
+                        # Send results via email
+                        conn = get_db_connection()
+                        email_result = conn.execute("SELECT email FROM users WHERE username = ?", (username,)).fetchone()
+                        conn.close()
                         if email_result:
                             student_email = email_result[0]
                             try:
                                 msg = EmailMessage()
-                                msg.set_content(f"Dear {username},\n\nYou scored {score}/{len(QUESTIONS)} in the Secure Quiz.\nTime Taken: {time_taken} seconds\n\nThank you!")
+                                msg.set_content(f"Dear {username},\n\nYou have successfully submitted your quiz.\nScore: {score}/{len(QUESTIONS)}\nTime Taken: {time_taken} seconds\n\nThank you for participating.")
                                 msg['Subject'] = "Quiz Submission Confirmation"
                                 msg['From'] = "rajkumar.k0322@gmail.com"
                                 msg['To'] = student_email
@@ -445,6 +391,40 @@ elif choice == "Take Quiz":
                         st.session_state.quiz_submitted = True
                         st.session_state.camera_active = False
                         remove_active_student(username)
+
+
+                        # Send result via email
+                        email_conn = get_db_connection()
+                        email_cur = email_conn.cursor()
+                        email_cur.execute("SELECT email FROM users WHERE username = ?", (username,))
+                        email_record = email_cur.fetchone()
+                        email_conn.close()
+
+                        if email_record and email_record[0]:
+                            try:
+                                result_msg = EmailMessage()
+                                result_msg.set_content(f"Hello {username},\n\nYou scored {score}/{len(QUESTIONS)} in the Secure Quiz.\n\nThank you!")
+                                result_msg['Subject'] = "Your Secure Quiz Result"
+                                result_msg['From'] = "rajkumar.k0322@gmail.com"
+                                result_msg['To'] = email_record[0]
+
+                                server = smtplib.SMTP('smtp.gmail.com', 587)
+                                server.starttls()
+                                server.login("rajkumar.k0322@gmail.com", "kcxf lzrq xnts xlng")  # App password
+                                server.send_message(result_msg)
+                                server.quit()
+
+                                st.success("Quiz result has been emailed to you.")
+                            except Exception as e:
+                                st.warning(f"Result email failed: {e}")
+
+                        # Cleanup session & camera
+                        st.success(f"✅ Quiz submitted successfully! You scored {score} out of {len(QUESTIONS)}.")
+                        st.session_state.quiz_submitted = True
+                        st.session_state.camera_active = False
+                        remove_active_student(username)
+
+
 
 elif choice == "Change Password":
     if not st.session_state.logged_in:
@@ -479,9 +459,10 @@ elif choice == "Change Password":
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
     
+    # Professor registration and login tabs
     tab1, tab2 = st.tabs(["Professor Login", "Professor Registration"])
     
-    with tab1:
+    with tab1:  # Login tab
         if not st.session_state.prof_verified:
             prof_id = st.text_input("Professor ID", key="prof_id_login")
             prof_pass = st.text_input("Professor Password", type="password", key="prof_pass_login")
@@ -497,6 +478,7 @@ elif choice == "Professor Panel":
                     st.session_state.username = prof_id
                     st.success(f"Login successful! Welcome Professor {prof_id}")
                     
+                    # Create professor-specific CSV file path
                     PROF_CSV_FILE = f"prof_{prof_id}_results.csv"
                     st.session_state.prof_csv_file = PROF_CSV_FILE
                 else:
@@ -504,6 +486,7 @@ elif choice == "Professor Panel":
         else:
             st.success(f"Welcome Professor {st.session_state.username}!")
             
+            # Professor dashboard after login
             PROF_CSV_FILE = st.session_state.prof_csv_file
             if os.path.exists(PROF_CSV_FILE):
                 with open(PROF_CSV_FILE, "rb") as file:
@@ -511,6 +494,7 @@ elif choice == "Professor Panel":
                                       f"{st.session_state.username}_quiz_results.csv", 
                                       mime="text/csv")
                 
+                # Show results preview
                 st.subheader("Your Quiz Results Preview")
                 prof_df = pd.read_csv(PROF_CSV_FILE)
                 st.dataframe(prof_df)
@@ -523,20 +507,24 @@ elif choice == "Professor Panel":
                 st.session_state.prof_csv_file = ""
                 st.experimental_rerun()
     
-    with tab2:
+    with tab2:  # Registration tab
         st.subheader("Professor Registration")
         
+        # Hidden RRCE- prefix (completely invisible to users)
         prof_prefix = "RRCE-"
         
+        # Display instruction about the prefix
         st.markdown("""
         <div style='background-color:#f0f2f6; padding:10px; border-radius:5px; margin-bottom:10px;'>
         <b>Note:</b> Your Professor ID will automatically start with <code>RRCE-</code>
         </div>
         """, unsafe_allow_html=True)
         
+        # Input for the unique part only
         prof_id_suffix = st.text_input("Enter your unique ID suffix", 
                                      help="This will be combined with RRCE- to create your full Professor ID")
         
+        # Combine prefix and suffix
         prof_id = f"{prof_prefix}{prof_id_suffix}"
         
         prof_email = st.text_input("Institutional Email", key="prof_email_reg")
@@ -544,6 +532,7 @@ elif choice == "Professor Panel":
         confirm_pass = st.text_input("Confirm Password", type="password", key="confirm_pass_reg")
         
         if st.button("Register as Professor"):
+            # Validation checks
             if not prof_id_suffix:
                 st.error("Please enter your unique ID suffix")
             elif not prof_email.endswith("@gmail.com"):
@@ -553,18 +542,21 @@ elif choice == "Professor Panel":
             elif prof_pass != confirm_pass:
                 st.error("Passwords do not match")
             else:
+                # Check if professor ID already exists
                 conn = get_db_connection()
                 cursor = conn.execute("SELECT username FROM users WHERE username = ?", (prof_id,))
                 if cursor.fetchone():
                     st.error("This Professor ID already exists")
                     conn.close()
                 else:
+                    # Store professor data in database
                     hashed_pass = hash_password(prof_pass)
                     conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
                                (prof_id, hashed_pass, "professor", prof_email))
                     conn.commit()
                     conn.close()
                     
+                    # Send registration confirmation with credentials
                     email_subject = "Professor Registration Successful"
                     email_body = f"""
                     <html>
@@ -581,13 +573,13 @@ elif choice == "Professor Panel":
                     
                     if send_email(prof_email, email_subject, email_body):
                         st.success("Registration successful! Your credentials have been sent to your email.")
+                        # Clear the input fields
                         st.session_state.prof_id_suffix = ""
                         st.session_state.prof_email_reg = ""
                         st.session_state.prof_pass_reg = ""
                         st.session_state.confirm_pass_reg = ""
                     else:
                         st.error("Registration completed but failed to send confirmation email")
-
 elif choice == "View Recorded Video":
     st.subheader("Recorded Quiz Videos")
     video_files = [f for f in os.listdir(RECORDING_DIR) if f.endswith(".mp4")]
