@@ -473,20 +473,64 @@ elif choice == "Professor Panel":
             st.success(f"Welcome Professor {st.session_state.username}!")
             
             # Professor dashboard after login
+            st.subheader("Professor Dashboard")
+            
+            # Section 1: Quiz Results
+            st.markdown("### 📊 Quiz Results")
             PROF_CSV_FILE = st.session_state.prof_csv_file
             if os.path.exists(PROF_CSV_FILE):
                 with open(PROF_CSV_FILE, "rb") as file:
-                    st.download_button("\U0001F4E5 Download Results CSV", file, 
+                    st.download_button("\U0001F4E5 Download Full Results CSV", file, 
                                       f"{st.session_state.username}_quiz_results.csv", 
                                       mime="text/csv")
                 
-                # Show results preview
-                st.subheader("Your Quiz Results Preview")
+                # Show interactive results preview
+                st.markdown("#### Results Preview")
                 prof_df = pd.read_csv(PROF_CSV_FILE)
+                
+                # Add filters
+                col1, col2 = st.columns(2)
+                with col1:
+                    selected_section = st.selectbox("Filter by Section", ["All"] + list(prof_df['Section'].unique()))
+                with col2:
+                    score_range = st.slider("Filter by Score Range", 
+                                          min_value=0, 
+                                          max_value=len(QUESTIONS), 
+                                          value=(0, len(QUESTIONS)))
+                
+                # Apply filters
+                if selected_section != "All":
+                    prof_df = prof_df[prof_df['Section'] == selected_section]
+                prof_df = prof_df[(prof_df['Score'] >= score_range[0]) & (prof_df['Score'] <= score_range[1])]
+                
+                # Display filtered results
                 st.dataframe(prof_df)
+                
+                # Show statistics
+                st.markdown("#### 📈 Performance Statistics")
+                avg_score = prof_df['Score'].mean()
+                pass_rate = len(prof_df[prof_df['Score'] >= len(QUESTIONS)/2]) / len(prof_df) * 100
+                avg_time = prof_df['Time_Taken'].mean()
+                
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Average Score", f"{avg_score:.1f}/{len(QUESTIONS)}")
+                col2.metric("Pass Rate", f"{pass_rate:.1f}%")
+                col3.metric("Average Time Taken", f"{avg_time:.1f} sec")
             else:
-                st.warning("No results available yet.")
+                st.warning("No quiz results available yet.")
             
+            # Section 2: Student Monitoring
+            st.markdown("### 👀 Live Student Monitoring")
+            live_students = get_live_students()
+            if live_students:
+                st.info(f"{len(live_students)} students currently taking the quiz:")
+                for student in live_students:
+                    st.write(f"- {student}")
+            else:
+                st.warning("No active students currently taking the quiz.")
+            
+            # Section 3: Account Management
+            st.markdown("### ⚙️ Account Settings")
             if st.button("Logout Professor"):
                 st.session_state.prof_verified = False
                 st.session_state.username = ""
@@ -498,13 +542,27 @@ elif choice == "Professor Panel":
         st.warning("Professor registration requires institutional verification.")
         
         # Professor details collection
+        st.markdown("### Professor Information")
         full_name = st.text_input("Full Name")
         designation = st.text_input("Designation")
         department = st.selectbox("Department", ["CSE", "ISE", "ECE", "EEE", "MECH", "CIVIL"])
         institutional_email = st.text_input("Institutional Email", help="Must be your college email")
         
+        # Terms and conditions
+        st.markdown("### Terms & Conditions")
+        st.markdown("""
+        1. This account is for faculty use only
+        2. You must keep your credentials secure
+        3. You are responsible for all activities under your account
+        """)
+        agree = st.checkbox("I agree to the terms and conditions")
+        
         if st.button("Request Professor Account"):
-            if full_name and designation and department and institutional_email:
+            if not all([full_name, designation, department, institutional_email]):
+                st.error("Please fill all the required fields")
+            elif not agree:
+                st.error("You must agree to the terms and conditions")
+            else:
                 # Generate professor credentials
                 prof_id = f"RRCE-{random.randint(10000, 99999)}"
                 prof_password = str(random.randint(100000, 999999))
@@ -526,9 +584,11 @@ Your professor account has been created with the following credentials:
 Professor ID: {prof_id}
 Password: {prof_password}
 
-Please keep these credentials secure and do not share with students.
-
-You can now login to the Secure Quiz App professor panel.
+Important Notes:
+- Your Professor ID starts with RRCE- (this is automatically assigned)
+- Keep these credentials secure and do not share with students
+- You can now login to the Secure Quiz App professor panel
+- First login will require password change
 
 Best regards,
 Secure Quiz App Team""")
@@ -542,15 +602,14 @@ Secure Quiz App Team""")
                         server.send_message(msg)
                         server.quit()
                         
-                        st.success("Professor account created! Your credentials have been sent to your institutional email.")
+                        st.success("Professor account created successfully!")
+                        st.info("Your credentials have been sent to your institutional email.")
                     except Exception as e:
                         st.error(f"Account created but failed to send email: {e}")
                 except sqlite3.IntegrityError:
                     st.error("Professor with this email already exists!")
                 finally:
                     conn.close()
-            else:
-                st.error("Please fill all the details")
 
 elif choice == "View Recorded Video":
     st.subheader("Recorded Quiz Videos")
