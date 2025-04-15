@@ -228,47 +228,65 @@ elif choice == "Login":
     forgot_email = st.text_input("Enter registered email", key="forgot_email_input")
     if st.button("Send Reset OTP"):
         conn = get_db_connection()
-        user = conn.execute("SELECT username FROM users WHERE email = ?", (forgot_email,)).fetchone()
+        user = conn.execute("SELECT username, email FROM users WHERE email = ?", (forgot_email,)).fetchone()
         conn.close()
 
         if user:
             otp = str(random.randint(100000, 999999))
             st.session_state['reset_email'] = forgot_email
             st.session_state['reset_otp'] = otp
-            st.session_state['reset_user'] = user[0]
+            st.session_state['reset_user'] = user[0]  # username
             if send_email_otp(forgot_email, otp):
-                st.success("OTP sent to your email.")
+                st.success("OTP sent to your email. Please check your inbox.")
+            else:
+                st.error("Failed to send OTP. Please try again.")
         else:
-            st.error("Email not registered.")
+            st.error("Email not found in our system.")
 
     # ---------- Reset Password ----------
-    if 'reset_otp' in st.session_state and 'reset_email' in st.session_state:
+    if 'reset_otp' in st.session_state:
         st.markdown("### Reset Your Password")
-        entered_otp = st.text_input("Enter OTP to reset password", key="reset_otp_input")
+        entered_otp = st.text_input("Enter OTP received", key="reset_otp_input")
         new_password = st.text_input("New Password", type="password", key="reset_new_password")
         confirm_password = st.text_input("Confirm New Password", type="password", key="reset_confirm_password")
 
         if st.button("Reset Password"):
-            if entered_otp == st.session_state.get('reset_otp'):
+            if entered_otp == st.session_state['reset_otp']:
                 if new_password == confirm_password:
-                    conn = get_db_connection()
-                    conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                                 (hash_password(new_password), st.session_state['reset_user']))
-                    conn.commit()
-                    conn.close()
-                    st.success("Password reset successfully! You can now log in.")
-
-                    # Clear session
-                    del st.session_state['reset_otp']
-                    del st.session_state['reset_email']
-                    del st.session_state['reset_user']
+                    if len(new_password) >= 6:  # Basic password strength check
+                        conn = get_db_connection()
+                        # Update password in database
+                        conn.execute("UPDATE users SET password = ? WHERE username = ?",
+                                     (hash_password(new_password), st.session_state['reset_user'])
+                        conn.commit()
+                        
+                        # Update password change count
+                        cursor = conn.execute("SELECT change_count FROM password_changes WHERE username = ?", 
+                                            (st.session_state['reset_user'],))
+                        record = cursor.fetchone()
+                        if record:
+                            conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?",
+                                        (st.session_state['reset_user'],))
+                        else:
+                            conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)",
+                                        (st.session_state['reset_user'],))
+                        conn.commit()
+                        conn.close()
+                        
+                        st.success("Password reset successfully! You can now log in with your new password.")
+                        
+                        # Clear reset session variables
+                        del st.session_state['reset_otp']
+                        del st.session_state['reset_email']
+                        del st.session_state['reset_user']
+                    else:
+                        st.error("Password must be at least 6 characters long.")
                 else:
                     st.error("Passwords do not match. Please try again.")
             else:
                 st.error("Incorrect OTP. Please try again.")
 
-
-
+                   
 
 elif choice == "Take Quiz":
     if not st.session_state.logged_in:
