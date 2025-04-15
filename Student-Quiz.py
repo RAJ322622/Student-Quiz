@@ -200,67 +200,84 @@ elif choice == "Login":
     st.subheader("Login")
 
     # ---------- Login Form ----------
-    username = st.text_input("Username", key="login_username")
-    password = st.text_input("Password", type="password", key="login_password")
+    username = st.text_input("Username", key="login_username").strip()
+    password = st.text_input("Password", type="password", key="login_password").strip()
     
     if st.button("Login"):
-        conn = get_db_connection()
-        cursor = conn.execute("SELECT password, role FROM users WHERE username = ?", (username,))
-        user_data = cursor.fetchone()
-        conn.close()
-        
-        if user_data and user_data[0] == hash_password(password):
-            st.session_state.logged_in = True
-            st.session_state.username = username
-            st.session_state.role = user_data[1]
-            st.success("Login successful!")
-            st.rerun()
+        if username and password:
+            conn = get_db_connection()
+            cursor = conn.execute("SELECT password, role FROM users WHERE username = ?", (username,))
+            user_data = cursor.fetchone()
+            conn.close()
+            
+            if user_data and user_data[0] == hash_password(password):
+                st.session_state.logged_in = True
+                st.session_state.username = username
+                st.session_state.role = user_data[1]
+                st.success("Login successful!")
+                st.rerun()
+            else:
+                st.error("Invalid username or password. Please try again.")
         else:
-            st.error("Invalid username or password.")
+            st.warning("Please enter both username and password")
 
     # ---------- Forgot Password ----------
     st.markdown("### Forgot Password?")
-    forgot_email = st.text_input("Enter registered email", key="forgot_email_input")
+    forgot_email = st.text_input("Enter registered email", key="forgot_email_input").strip()
     
     if st.button("Send Reset OTP"):
-        conn = get_db_connection()
-        user = conn.execute("SELECT username, email FROM users WHERE email = ?", (forgot_email,)).fetchone()
-        conn.close()
+        if forgot_email:
+            conn = get_db_connection()
+            user = conn.execute("SELECT username, email FROM users WHERE email = ?", (forgot_email,)).fetchone()
+            conn.close()
 
-        if user:
-            otp = str(random.randint(100000, 999999))
-            if send_email_otp(user[1], otp):
-                st.session_state['reset_email'] = user[1]
-                st.session_state['reset_otp'] = otp 
-                st.session_state['reset_user'] = user[0]
-                st.success("OTP sent to your email.")
+            if user:
+                otp = str(random.randint(100000, 999999))
+                if send_email_otp(user[1], otp):
+                    st.session_state['reset_email'] = user[1]
+                    st.session_state['reset_otp'] = otp
+                    st.session_state['reset_user'] = user[0]
+                    st.success("OTP sent to your email.")
+                else:
+                    st.error("Failed to send OTP. Please try again.")
             else:
-                st.error("Failed to send OTP. Please try again.")
+                st.error("Email not found in our system.")
         else:
-            st.error("Email not registered.")
+            st.warning("Please enter your registered email")
 
     # ---------- Reset Password ----------
     if 'reset_otp' in st.session_state:
         st.markdown("### Reset Your Password")
-        entered_otp = st.text_input("Enter OTP", key="reset_otp_input")
-        new_password = st.text_input("New Password", type="password", key="reset_new_password")
-        confirm_password = st.text_input("Confirm Password", type="password", key="reset_confirm_password")
+        entered_otp = st.text_input("Enter OTP", key="reset_otp_input").strip()
+        new_password = st.text_input("New Password", type="password", key="reset_new_password").strip()
+        confirm_password = st.text_input("Confirm Password", type="password", key="reset_confirm_password").strip()
 
         if st.button("Reset Password"):
-            if entered_otp == st.session_state['reset_otp']:
-                if new_password == confirm_password:
-                    conn = get_db_connection()
-                    try:
-                        # Directly replace old password with new hashed password
-                        conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                                    (hash_password(new_password), st.session_state['reset_user']))
-                        conn.commit()
-                        
-                        # Clear password change restrictions
-                        conn.execute("DELETE FROM password_changes WHERE username = ?",
-                                    (st.session_state['reset_user'],))
-                        conn.commit()
-                        
+            if not all([entered_otp, new_password, confirm_password]):
+                st.warning("Please fill all fields")
+            elif entered_otp != st.session_state['reset_otp']:
+                st.error("Invalid OTP!")
+            elif new_password != confirm_password:
+                st.error("Passwords do not match!")
+            else:
+                conn = get_db_connection()
+                try:
+                    # Update password in database
+                    conn.execute("UPDATE users SET password = ? WHERE username = ?",
+                               (hash_password(new_password), st.session_state['reset_user']))
+                    conn.commit()
+                    
+                    # Clear password change restrictions
+                    conn.execute("DELETE FROM password_changes WHERE username = ?",
+                               (st.session_state['reset_user'],))
+                    conn.commit()
+                    
+                    # Verify the password was updated
+                    cursor = conn.execute("SELECT password FROM users WHERE username = ?",
+                                        (st.session_state['reset_user'],))
+                    updated_password = cursor.fetchone()[0]
+                    
+                    if updated_password == hash_password(new_password):
                         # Automatically log user in
                         st.session_state.logged_in = True
                         st.session_state.username = st.session_state['reset_user']
@@ -275,16 +292,14 @@ elif choice == "Login":
                         for key in ['reset_otp', 'reset_email', 'reset_user']:
                             if key in st.session_state:
                                 del st.session_state[key]
-                                
-                    except Exception as e:
-                        st.error(f"Error updating password: {e}")
-                    finally:
-                        conn.close()
-                        st.rerun()
-                else:
-                    st.error("Passwords do not match!")
-            else:
-                st.error("Invalid OTP!")
+                    else:
+                        st.error("Password update failed. Please try again.")
+                    
+                except Exception as e:
+                    st.error(f"Database error: {str(e)}")
+                finally:
+                    conn.close()
+                    st.rerun())
 
 elif choice == "Take Quiz":
     if not st.session_state.logged_in:
