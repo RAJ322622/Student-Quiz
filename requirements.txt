@@ -1,5 +1,6 @@
 streamlit
 streamlit-webrtc
+streamlit_autorefresh 
 opencv-python-headless
 gTTS
 moviepy
