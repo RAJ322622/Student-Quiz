@@ -417,7 +417,7 @@ elif choice == "Professor Panel":
         if st.button("Verify Key"):
             if secret_key == PROFESSOR_SECRET_KEY:
                 st.session_state.prof_secret_verified = True
-                st.rerun
+                st.rerun()
             else:
                 st.error("Invalid secret key! Access denied.")
     else:
