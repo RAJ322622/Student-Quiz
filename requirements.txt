@@ -1,2 +1,8 @@
 streamlit
-
+pandas
+streamlit-webrtc
+streamlit-autorefresh
+gTTS
+opencv-python-headless
+sendgrid
+sqlite3
