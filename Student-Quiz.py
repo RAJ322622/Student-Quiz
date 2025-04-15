@@ -268,6 +268,8 @@ elif choice == "Login":
                 st.error("Incorrect OTP. Please try again.")
 
 
+
+
 elif choice == "Take Quiz":
     if not st.session_state.logged_in:
         st.warning("Please login first!")
@@ -452,7 +454,6 @@ elif choice == "Change Password":
                                      (username,))
                     conn.commit()
                     st.success("Password updated successfully.")
-                conn.close()
 
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
