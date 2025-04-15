@@ -7,7 +7,6 @@ import os
 import json
 from datetime import datetime
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, VideoTransformerBase
-from streamlit_autorefresh import st_autorefresh
 import av
 import smtplib
 from email.message import EmailMessage
@@ -115,6 +114,27 @@ def remove_active_student(username):
     except:
         pass
 
+def send_email(to_email, subject, body):
+    try:
+        msg = EmailMessage()
+        msg['Subject'] = subject
+        msg['From'] = "rajkumar.k0322@gmail.com"
+        msg['To'] = to_email
+
+        # Add both plain text and HTML versions
+        msg.set_content("Please view this email in an HTML-compatible client")
+        msg.add_alternative(body, subtype='html')
+
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login("rajkumar.k0322@gmail.com", "kcxf lzrq xnts xlng")  # App Password
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        st.error(f"Failed to send email: {e}")
+        return False 
+
 def get_live_students():
     try:
         with open(ACTIVE_FILE, "r") as f:
@@ -122,7 +142,6 @@ def get_live_students():
     except:
         return []
 
-# Updated VideoProcessor class with proper recording handling
 class VideoProcessor(VideoTransformerBase):
     def __init__(self):
         self.frames = []
@@ -293,8 +312,6 @@ elif choice == "Login":
             else:
                 st.error("Incorrect OTP.")
 
-
-# In the Take Quiz section
 elif choice == "Take Quiz":
     if not st.session_state.logged_in:
         st.warning("Please login first!")
@@ -337,7 +354,6 @@ elif choice == "Take Quiz":
                 if st.session_state.camera_active and not st.session_state.quiz_submitted:
                     st.markdown("<span style='color:green;'>🟢 Webcam is ON (Recording automatically started)</span>", unsafe_allow_html=True)
                     
-                    # Initialize webrtc_streamer
                     webrtc_ctx = webrtc_streamer(
                         key="quiz_recording",
                         mode=WebRtcMode.SENDRECV,
@@ -356,22 +372,16 @@ elif choice == "Take Quiz":
                         }
                     )
                     
-                    # Handle camera state
                     if webrtc_ctx.state.playing:
                         st.session_state.camera_active = True
                     else:
                         st.warning("Camera is not active. Please allow camera permissions to continue.")
                         st.info("If the camera doesn't start automatically, please refresh the page and allow permissions when prompted.")
 
-                # Rest of your quiz questions and submission logic...
                 for idx, question in enumerate(QUESTIONS):
                     st.markdown(f"**Q{idx+1}:** {question['question']}")
                     ans = st.radio("Select your answer:", question['options'], key=f"q{idx}", index=None)
                     answers[question['question']] = ans
-
-                submit_btn = st.button("Submit Quiz")
-                # ... rest of your submission logic
-
 
                 submit_btn = st.button("Submit Quiz")
                 auto_submit_triggered = st.session_state.get("auto_submit", False)
@@ -466,15 +476,12 @@ elif choice == "Change Password":
                     st.success("Password updated successfully.")
                 conn.close()
 
-
-
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
     
-    # Professor registration and login tabs
     tab1, tab2 = st.tabs(["Professor Login", "Professor Registration"])
     
-    with tab1:  # Login tab
+    with tab1:
         if not st.session_state.prof_verified:
             prof_id = st.text_input("Professor ID", key="prof_id_login")
             prof_pass = st.text_input("Professor Password", type="password", key="prof_pass_login")
@@ -490,7 +497,6 @@ elif choice == "Professor Panel":
                     st.session_state.username = prof_id
                     st.success(f"Login successful! Welcome Professor {prof_id}")
                     
-                    # Create professor-specific CSV file path
                     PROF_CSV_FILE = f"prof_{prof_id}_results.csv"
                     st.session_state.prof_csv_file = PROF_CSV_FILE
                 else:
@@ -498,7 +504,6 @@ elif choice == "Professor Panel":
         else:
             st.success(f"Welcome Professor {st.session_state.username}!")
             
-            # Professor dashboard after login
             PROF_CSV_FILE = st.session_state.prof_csv_file
             if os.path.exists(PROF_CSV_FILE):
                 with open(PROF_CSV_FILE, "rb") as file:
@@ -506,7 +511,6 @@ elif choice == "Professor Panel":
                                       f"{st.session_state.username}_quiz_results.csv", 
                                       mime="text/csv")
                 
-                # Show results preview
                 st.subheader("Your Quiz Results Preview")
                 prof_df = pd.read_csv(PROF_CSV_FILE)
                 st.dataframe(prof_df)
@@ -519,24 +523,20 @@ elif choice == "Professor Panel":
                 st.session_state.prof_csv_file = ""
                 st.experimental_rerun()
     
-    with tab2:  # Registration tab
+    with tab2:
         st.subheader("Professor Registration")
         
-        # Hidden RRCE- prefix (completely invisible to users)
         prof_prefix = "RRCE-"
         
-        # Display instruction about the prefix
         st.markdown("""
         <div style='background-color:#f0f2f6; padding:10px; border-radius:5px; margin-bottom:10px;'>
         <b>Note:</b> Your Professor ID will automatically start with <code>RRCE-</code>
         </div>
         """, unsafe_allow_html=True)
         
-        # Input for the unique part only
         prof_id_suffix = st.text_input("Enter your unique ID suffix", 
                                      help="This will be combined with RRCE- to create your full Professor ID")
         
-        # Combine prefix and suffix
         prof_id = f"{prof_prefix}{prof_id_suffix}"
         
         prof_email = st.text_input("Institutional Email", key="prof_email_reg")
@@ -544,7 +544,6 @@ elif choice == "Professor Panel":
         confirm_pass = st.text_input("Confirm Password", type="password", key="confirm_pass_reg")
         
         if st.button("Register as Professor"):
-            # Validation checks
             if not prof_id_suffix:
                 st.error("Please enter your unique ID suffix")
             elif not prof_email.endswith("@gmail.com"):
@@ -554,21 +553,18 @@ elif choice == "Professor Panel":
             elif prof_pass != confirm_pass:
                 st.error("Passwords do not match")
             else:
-                # Check if professor ID already exists
                 conn = get_db_connection()
                 cursor = conn.execute("SELECT username FROM users WHERE username = ?", (prof_id,))
                 if cursor.fetchone():
                     st.error("This Professor ID already exists")
                     conn.close()
                 else:
-                    # Store professor data in database
                     hashed_pass = hash_password(prof_pass)
                     conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
                                (prof_id, hashed_pass, "professor", prof_email))
                     conn.commit()
                     conn.close()
                     
-                    # Send registration confirmation with credentials
                     email_subject = "Professor Registration Successful"
                     email_body = f"""
                     <html>
@@ -585,13 +581,13 @@ elif choice == "Professor Panel":
                     
                     if send_email(prof_email, email_subject, email_body):
                         st.success("Registration successful! Your credentials have been sent to your email.")
-                        # Clear the input fields
                         st.session_state.prof_id_suffix = ""
                         st.session_state.prof_email_reg = ""
                         st.session_state.prof_pass_reg = ""
                         st.session_state.confirm_pass_reg = ""
                     else:
                         st.error("Registration completed but failed to send confirmation email")
+
 elif choice == "View Recorded Video":
     st.subheader("Recorded Quiz Videos")
     video_files = [f for f in os.listdir(RECORDING_DIR) if f.endswith(".mp4")]
