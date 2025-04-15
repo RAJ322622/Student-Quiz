@@ -505,7 +505,8 @@ elif choice == "Professor Panel":
                 with col2:
                     st.metric("Average Score", f"{df['Score'].mean():.1f}/{len(QUESTIONS)}")
                 with col3:
-                    st.metric("Pass Rate", f"{(len(df[df['Score'] >= len(QUESTIONS)/2])/len(df)*100:.1f}%")
+                    st.metric("Pass Rate", f"{(len(df[df['Score'] >= len(QUESTIONS)/2]) / len(df) * 100):.1f}%")
+
                 
                 # Show full results
                 st.dataframe(df)
