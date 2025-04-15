@@ -419,30 +419,30 @@ elif choice == "Professor Panel":
                 st.experimental_rerun()
             else:
                 st.error("Invalid secret key! Access denied.")
-    return
-    
-    tab1, tab2 = st.tabs(["Professor Login", "Professor Registration"])
-    
-    with tab1:
-        if not st.session_state.get('prof_logged_in', False):
-            prof_id = st.text_input("Professor ID")
-            prof_pass = st.text_input("Professor Password", type="password")
-            
-            if st.button("Login as Professor"):
-                conn = get_db_connection()
-                cursor = conn.execute("SELECT password, role, email FROM users WHERE username = ? AND role = 'professor'", 
-                                    (prof_id,))
-                prof_data = cursor.fetchone()
-                conn.close()
+    else:
+        tab1, tab2 = st.tabs(["Professor Login", "Professor Registration"])
+        
+        with tab1:
+            if not st.session_state.get('prof_logged_in', False):
+                prof_id = st.text_input("Professor ID")
+                prof_pass = st.text_input("Professor Password", type="password")
                 
-                if prof_data and prof_data[0] == hash_password(prof_pass):
-                    st.session_state.prof_logged_in = True
-                    st.session_state.username = prof_id
-                    st.session_state.role = "professor"
-                    st.success(f"Welcome Professor {prof_id}!")
-                    os.makedirs(st.session_state.prof_dir, exist_ok=True)
-                else:
-                    st.error("Invalid Professor credentials")
+                if st.button("Login as Professor"):
+                    conn = get_db_connection()
+                    cursor = conn.execute("SELECT password, role, email FROM users WHERE username = ? AND role = 'professor'", 
+                                        (prof_id,))
+                    prof_data = cursor.fetchone()
+                    conn.close()
+                    
+                    if prof_data and prof_data[0] == hash_password(prof_pass):
+                        st.session_state.prof_logged_in = True
+                        st.session_state.username = prof_id
+                        st.session_state.role = "professor"
+                        st.success(f"Welcome Professor {prof_id}!")
+                        os.makedirs(st.session_state.prof_dir, exist_ok=True)
+                    else:
+                        st.error("Invalid Professor credentials")
+            
         else:
             st.success(f"Welcome Professor {st.session_state.username}!")
             st.subheader("Student Results Management")
