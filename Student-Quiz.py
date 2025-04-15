@@ -495,33 +495,86 @@ elif choice == "Professor Panel":
                     except Exception as e:
                         st.error(f"Login notification failed: {e}")
                     
-                    # Create professor-specific CSV file path
-                    PROF_CSV_FILE = f"prof_{prof_id}_results.csv"
-                    st.session_state.prof_csv_file = PROF_CSV_FILE
+                    # Create professor-specific directory if not exists
+                    os.makedirs(f"professor_data/{prof_id}", exist_ok=True)
+                    st.session_state.prof_dir = f"professor_data/{prof_id}"
                 else:
                     st.error("Invalid Professor ID or password")
         else:
             st.success(f"Welcome Professor {st.session_state.username}!")
             
             # Professor dashboard after login
-            PROF_CSV_FILE = st.session_state.get('prof_csv_file', "prof_quiz_results.csv")
-            if os.path.exists(PROF_CSV_FILE):
-                with open(PROF_CSV_FILE, "rb") as file:
-                    st.download_button("\U0001F4E5 Download Results CSV", file, 
-                                    f"{st.session_state.username}_quiz_results.csv", 
-                                    mime="text/csv")
-                
-                # Show results preview
-                st.subheader("Your Quiz Results Preview")
-                prof_df = pd.read_csv(PROF_CSV_FILE)
-                st.dataframe(prof_df)
-            else:
-                st.warning("No results available yet.")
+            st.subheader("Student Results Management")
             
+            # Section 1: View All Results
+            st.markdown("### 📊 All Student Results")
+            result_files = [f for f in os.listdir(st.session_state.prof_dir) if f.endswith(".csv")]
+            
+            if result_files:
+                selected_file = st.selectbox("Select results file", result_files)
+                df = pd.read_csv(f"{st.session_state.prof_dir}/{selected_file}")
+                
+                # Display statistics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Students", len(df))
+                with col2:
+                    st.metric("Average Score", f"{df['Score'].mean():.1f}/{len(QUESTIONS)}")
+                with col3:
+                    st.metric("Pass Rate", f"{(len(df[df['Score'] >= len(QUESTIONS)/2])/len(df)*100:.1f}%")
+                
+                # Display full results
+                st.dataframe(df)
+                
+                # Download options
+                st.download_button(
+                    label="Download Selected Results",
+                    data=df.to_csv(index=False),
+                    file_name=selected_file,
+                    mime="text/csv"
+                )
+            else:
+                st.warning("No student results available yet.")
+            
+            # Section 2: Section-wise Results
+            st.markdown("---")
+            st.markdown("### 📈 Section-wise Analysis")
+            if result_files:
+                sections = df['Section'].unique()
+                selected_section = st.selectbox("Select section", sections)
+                
+                section_df = df[df['Section'] == selected_section]
+                st.write(f"Results for {selected_section} section:")
+                st.dataframe(section_df)
+                
+                # Visualization
+                st.bar_chart(section_df['Score'].value_counts().sort_index())
+            else:
+                st.warning("No section data available yet.")
+            
+            # Section 3: Manual Results Upload
+            st.markdown("---")
+            st.markdown("### 📤 Manual Results Upload")
+            uploaded_file = st.file_uploader("Upload student results (CSV format)", type="csv")
+            if uploaded_file is not None:
+                try:
+                    new_df = pd.read_csv(uploaded_file)
+                    required_cols = ['Username', 'USN', 'Section', 'Score', 'Timestamp']
+                    if all(col in new_df.columns for col in required_cols):
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        save_path = f"{st.session_state.prof_dir}/uploaded_{timestamp}.csv"
+                        new_df.to_csv(save_path, index=False)
+                        st.success(f"Results saved successfully as uploaded_{timestamp}.csv")
+                    else:
+                        st.error("Uploaded file doesn't contain all required columns")
+                except Exception as e:
+                    st.error(f"Error processing file: {e}")
+            
+            # Logout button
             if st.button("Logout Professor"):
                 st.session_state.prof_verified = False
                 st.session_state.username = ""
-                st.session_state.prof_csv_file = ""
+                st.session_state.prof_dir = ""
                 st.experimental_rerun()
     
     with tab2:  # Registration tab
@@ -546,6 +599,9 @@ elif choice == "Professor Panel":
                     conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
                              (prof_id, hash_password(prof_password), "professor", institutional_email))
                     conn.commit()
+                    
+                    # Create professor directory
+                    os.makedirs(f"professor_data/{prof_id}", exist_ok=True)
                     
                     # Send credentials via email
                     try:
