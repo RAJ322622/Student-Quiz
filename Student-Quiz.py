@@ -13,72 +13,17 @@ import smtplib
 from email.message import EmailMessage
 import random
 
-# Configuration
-PROF_CSV_FILE = "prof_quiz_results.csv"
-STUDENT_CSV_FILE = "student_quiz_results.csv"
-ACTIVE_FILE = "active_students.json"
-RECORDING_DIR = "recordings"
-os.makedirs(RECORDING_DIR, exist_ok=True)
-
-# Email configuration
-EMAIL_SENDER = "rajkumar.k0322@gmail.com"
-EMAIL_PASSWORD = "kcxf lzrq xnts xlng"  # App Password
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-
-# Secret key for professor panel
-PROFESSOR_SECRET_KEY = "RRCE@123"
-
-# Initialize session state
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-if 'username' not in st.session_state:
-    st.session_state.username = ""
-if 'role' not in st.session_state:  # Added role to session state
-    st.session_state.role = ""
-if 'camera_active' not in st.session_state:
-    st.session_state.camera_active = False
-if 'prof_verified' not in st.session_state:
-    st.session_state.prof_verified = False
-if 'quiz_submitted' not in st.session_state:
-    st.session_state.quiz_submitted = False
-if 'usn' not in st.session_state:
-    st.session_state.usn = ""
-if 'section' not in st.session_state:
-    st.session_state.section = ""
-if 'prof_dir' not in st.session_state:
-    st.session_state.prof_dir = "professor_data"
-
-# Database functions
-def get_db_connection():
-    conn = sqlite3.connect('quiz_app.db')
-    conn.execute('''CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE,
-                    password TEXT,
-                    role TEXT DEFAULT 'student',
-                    email TEXT)''')
-    conn.execute('''CREATE TABLE IF NOT EXISTS password_changes (
-                    username TEXT PRIMARY KEY,
-                    change_count INTEGER DEFAULT 0)''')
-    conn.execute('''CREATE TABLE IF NOT EXISTS quiz_attempts (
-                    username TEXT PRIMARY KEY,
-                    attempt_count INTEGER DEFAULT 0)''')
-    return conn
-
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
 def send_email_otp(to_email, otp):
     try:
         msg = EmailMessage()
         msg.set_content(f"Your OTP for Secure Quiz App is: {otp}")
         msg['Subject'] = "Email Verification OTP - Secure Quiz App"
-        msg['From'] = EMAIL_SENDER
+        msg['From'] = "rajkumar.k0322@gmail.com"
         msg['To'] = to_email
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+
+        server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
-        server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+        server.login("rajkumar.k0322@gmail.com", "kcxf lzrq xnts xlng")  # App Password
         server.send_message(msg)
         server.quit()
         return True
@@ -86,11 +31,87 @@ def send_email_otp(to_email, otp):
         st.error(f"Failed to send OTP: {e}")
         return False
 
+
+
+PROF_CSV_FILE = "prof_quiz_results.csv"
+STUDENT_CSV_FILE = "student_quiz_results.csv"
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
+# Secret key for professor panel
+PROFESSOR_SECRET_KEY = "RRCE@123"
+ACTIVE_FILE = "active_students.json"
+RECORDING_DIR = "recordings"
+os.makedirs(RECORDING_DIR, exist_ok=True)
+
+# Session state defaults
+for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_submitted", "usn", "section"]:
+    if key not in st.session_state:
+        st.session_state[key] = False if key not in ["username", "usn", "section"] else ""
+
+
+def get_db_connection():
+    conn = sqlite3.connect('quiz_app.db')
+
+    # Create 'users' table if it doesn't exist
+    conn.execute('''CREATE TABLE IF NOT EXISTS users (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        username TEXT UNIQUE,
+                        password TEXT,
+                        role TEXT DEFAULT 'student')''')
+
+    # ✅ Add email column if it doesn't exist
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [column[1] for column in cursor.fetchall()]
+    if "email" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        conn.commit()
+
+    # Create other tables
+    conn.execute('''CREATE TABLE IF NOT EXISTS password_changes (
+                        username TEXT PRIMARY KEY,
+                        change_count INTEGER DEFAULT 0)''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS quiz_attempts (
+                        username TEXT PRIMARY KEY,
+                        attempt_count INTEGER DEFAULT 0)''')
+
+    return conn
+
+
+def add_email_column_if_not_exists():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [col[1] for col in cursor.fetchall()]
+    if "email" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        conn.commit()
+    conn.close()
+
+
+
+
+def add_email_column_if_not_exists():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [column[1] for column in cursor.fetchall()]
+    if "email" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        conn.commit()
+    conn.close()
+
+
+# Password hashing
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+# Register user
 def register_user(username, password, role, email):
     conn = get_db_connection()
     try:
-        conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
-                     (username, hash_password(password), role, email))
+        conn.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+                     (username, hash_password(password), role))
         conn.commit()
         st.success("Registration successful! Please login.")
     except sqlite3.IntegrityError:
@@ -98,15 +119,16 @@ def register_user(username, password, role, email):
     finally:
         conn.close()
 
+
+# Authenticate user
 def authenticate_user(username, password):
     conn = get_db_connection()
-    cursor = conn.execute("SELECT password, role FROM users WHERE username = ?", (username,))
+    cursor = conn.execute("SELECT password FROM users WHERE username = ?", (username,))
     user = cursor.fetchone()
     conn.close()
-    if user:
-        return user[0] == hash_password(password), user[1]  # Return both password match and role
-    return False, None
+    return user and user[0] == hash_password(password)
 
+# Get user role
 def get_user_role(username):
     conn = get_db_connection()
     cursor = conn.execute("SELECT role FROM users WHERE username = ?", (username,))
@@ -114,11 +136,12 @@ def get_user_role(username):
     conn.close()
     return role[0] if role else "student"
 
+# Active student tracking
 def add_active_student(username):
     try:
         with open(ACTIVE_FILE, "r") as f:
             data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except:
         data = []
     if username not in data:
         data.append(username)
@@ -132,30 +155,21 @@ def remove_active_student(username):
         data = [u for u in data if u != username]
         with open(ACTIVE_FILE, "w") as f:
             json.dump(data, f)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except:
         pass
 
 def get_live_students():
     try:
         with open(ACTIVE_FILE, "r") as f:
             return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except:
         return []
 
-# Question bank
+# Dummy question bank
 QUESTIONS = [
-    {
-        "question": "What is the format specifier for an integer in C?",
-        "options": ["%c", "%d", "%f", "%s"],
-        "answer": "%d"
-    },
-    {
-        "question": "Which loop is used when the number of iterations is known?",
-        "options": ["while", "do-while", "for", "if"],
-        "answer": "for"
-    },
+    {"question": "What is the format specifier for an integer in C?", "options": ["%c", "%d", "%f", "%s"], "answer": "%d"},
+    {"question": "Which loop is used when the number of iterations is known?", "options": ["while", "do-while", "for", "if"], "answer": "for"},
 ]
-
 class VideoProcessor(VideoTransformerBase):
     def recv(self, frame):
         return frame
