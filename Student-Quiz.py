@@ -445,61 +445,123 @@ elif choice == "Change Password":
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
     
-    # First check for secret key before showing anything
-    if not st.session_state.get('prof_verified', False):
+    # First and mandatory secret key check
+    if 'prof_secret_verified' not in st.session_state:
         secret_key = st.text_input("Enter Professor Secret Key to continue", type="password")
         
         if st.button("Verify Key"):
             if secret_key == PROFESSOR_SECRET_KEY:
-                st.session_state.prof_verified = True
-                st.rerun()
-
+                st.session_state.prof_secret_verified = True
+                st.experimental_rerun()
             else:
                 st.error("Invalid secret key! Access denied.")
-    else:
-        # Professor dashboard tabs
-        tab1, tab2 = st.tabs(["Professor Login", "Professor Registration"])
-        
-        with tab1:  # Login tab
-            if not st.session_state.get('prof_verified', False):
-                prof_id = st.text_input("Professor ID")
-                prof_pass = st.text_input("Professor Password", type="password")
+        return  # Don't proceed further until secret key is verified
+    
+    # After secret key verification, show login/registration tabs
+    tab1, tab2 = st.tabs(["Professor Login", "Professor Registration"])
+    
+    with tab1:  # Login tab
+        if not st.session_state.get('prof_logged_in', False):
+            prof_id = st.text_input("Professor ID")
+            prof_pass = st.text_input("Professor Password", type="password")
+            
+            if st.button("Login as Professor"):
+                conn = get_db_connection()
+                cursor = conn.execute("SELECT password, role, email FROM users WHERE username = ? AND role = 'professor'", 
+                                    (prof_id,))
+                prof_data = cursor.fetchone()
+                conn.close()
                 
-                if st.button("Login as Professor"):
-                    conn = get_db_connection()
-                    cursor = conn.execute("SELECT password, role, email FROM users WHERE username = ? AND role = 'professor'", 
-                                        (prof_id,))
-                    prof_data = cursor.fetchone()
-                    conn.close()
+                if prof_data and prof_data[0] == hash_password(prof_pass):
+                    st.session_state.prof_logged_in = True
+                    st.session_state.username = prof_id
+                    st.session_state.role = "professor"
+                    st.success(f"Welcome Professor {prof_id}!")
                     
-                    if prof_data and prof_data[0] == hash_password(prof_pass):
-                        st.session_state.prof_verified = True
-                        st.session_state.username = prof_id
-                        st.session_state.role = "professor"
-                        st.success(f"Welcome Professor {prof_id}!")
-                        
-                        # Create professor directory if it doesn't exist
-                        os.makedirs(st.session_state.prof_dir, exist_ok=True)
-                        
-                        # Send login notification
-                        try:
-                            msg = EmailMessage()
-                            msg.set_content(f"Professor {prof_id} logged in at {datetime.now()}")
-                            msg['Subject'] = "Professor Login Notification"
-                            msg['From'] = EMAIL_SENDER
-                            msg['To'] = prof_data[2]  # Professor's email
+                    # Create professor directory if it doesn't exist
+                    os.makedirs(st.session_state.prof_dir, exist_ok=True)
+                    
+                    # Send login notification
+                    try:
+                        msg = EmailMessage()
+                        msg.set_content(f"Professor {prof_id} logged in at {datetime.now()}")
+                        msg['Subject'] = "Professor Login Notification"
+                        msg['From'] = EMAIL_SENDER
+                        msg['To'] = prof_data[2]  # Professor's email
 
-                            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-                            server.starttls()
-                            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-                            server.send_message(msg)
-                            server.quit()
-                        except Exception as e:
-                            st.error(f"Login notification failed: {e}")
-                    else:
-                        st.error("Invalid Professor credentials")
+                        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+                        server.starttls()
+                        server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                        server.send_message(msg)
+                        server.quit()
+                    except Exception as e:
+                        st.error(f"Login notification failed: {e}")
+                else:
+                    st.error("Invalid Professor credentials")
+        else:
+            # Show professor dashboard after successful login
+            st.success(f"Welcome Professor {st.session_state.username}!")
+            # ... rest of professor dashboard code ...
+    
+    with tab2:  # Registration tab
+        st.subheader("Professor Registration")
+        st.warning("Professor accounts require verification.")
+        
+        # Registration form
+        full_name = st.text_input("Full Name")
+        designation = st.text_input("Designation")
+        department = st.selectbox("Department", ["CSE", "ISE", "ECE", "EEE", "MECH", "CIVIL"])
+        institutional_email = st.text_input("Institutional Email")
+        
+        if st.button("Request Account"):
+            if full_name and designation and department and institutional_email:
+                # Generate credentials
+                prof_id = f"PROF-{random.randint(10000, 99999)}"
+                temp_password = str(random.randint(100000, 999999))
+                
+                # Register professor
+                conn = get_db_connection()
+                try:
+                    conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
+                                (prof_id, hash_password(temp_password), "professor", institutional_email))
+                    conn.commit()
+                    
+                    # Create directory
+                    os.makedirs(f"professor_data/{prof_id}", exist_ok=True)
+                    
+                    # Send credentials
+                    try:
+                        msg = EmailMessage()
+                        msg.set_content(f"""Dear {full_name},
+
+Your professor account has been created:
+
+Username: {prof_id}
+Password: {temp_password}
+
+Please login and change your password immediately.
+
+Regards,
+Quiz App Team""")
+                        msg['Subject'] = "Professor Account Credentials"
+                        msg['From'] = EMAIL_SENDER
+                        msg['To'] = institutional_email
+
+                        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+                        server.starttls()
+                        server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                        server.send_message(msg)
+                        server.quit()
+                        
+                        st.success("Account created! Credentials sent to your email.")
+                    except Exception as e:
+                        st.error(f"Account created but email failed: {e}")
+                except sqlite3.IntegrityError:
+                    st.error("Professor with this email already exists!")
+                finally:
+                    conn.close()
             else:
-                st.success(f"Welcome Professor {st.session_state.username}!")
+                st.error("Please fill all fields!")
                 
                 # Professor dashboard
                 st.subheader("Student Results Management")
