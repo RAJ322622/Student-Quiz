@@ -485,21 +485,103 @@ elif choice == "Professor Panel":
         else:
             st.warning("No results available yet.")
 
-elif choice == "Professor Monitoring Panel":
-    if not st.session_state.prof_verified:
-        st.warning("Professor access only. Please login via 'Professor Panel' to verify.")
-    else:
-        st_autorefresh(interval=10 * 1000, key="monitor_refresh")
-        st.header("\U0001F4E1 Live Student Monitoring")
-        st.info("Students currently taking the quiz will appear here.")
-        live_stream_ids = get_live_students()
-        if not live_stream_ids:
-            st.write("No active students currently taking the quiz.")
+elif choice == "Professor Panel":
+    st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
+    
+    # Professor registration and login tabs
+    tab1, tab2 = st.tabs(["Professor Login", "Professor Registration"])
+    
+    with tab1:  # Login tab
+        if not st.session_state.prof_verified:
+            prof_id = st.text_input("Professor ID", key="prof_id_login")
+            prof_pass = st.text_input("Professor Password", type="password", key="prof_pass_login")
+            
+            if st.button("Login as Professor"):
+                conn = get_db_connection()
+                cursor = conn.execute("SELECT password, role FROM users WHERE username = ?", (prof_id,))
+                prof_data = cursor.fetchone()
+                conn.close()
+                
+                if prof_data and prof_data[1] == "professor" and prof_data[0] == hash_password(prof_pass):
+                    st.session_state.prof_verified = True
+                    st.session_state.username = prof_id
+                    st.success("Professor login successful!")
+                else:
+                    st.error("Invalid Professor ID or password")
         else:
-            for student_id in live_stream_ids:
-                st.subheader(f"Live Feed from: {student_id}")
-                st.warning("Note: Real-time video streaming from remote users is not supported on Streamlit Community Cloud.")
-                st.write(f"\U0001F464 {student_id} is currently taking the quiz.")
+            st.success(f"Welcome Professor {st.session_state.username}!")
+            
+            # Professor dashboard after login
+            if os.path.exists(PROF_CSV_FILE):
+                with open(PROF_CSV_FILE, "rb") as file:
+                    st.download_button("\U0001F4E5 Download Results CSV", file, "prof_quiz_results.csv", mime="text/csv")
+                
+                # Show results preview
+                st.subheader("Quiz Results Preview")
+                prof_df = pd.read_csv(PROF_CSV_FILE)
+                st.dataframe(prof_df)
+            else:
+                st.warning("No results available yet.")
+            
+            if st.button("Logout Professor"):
+                st.session_state.prof_verified = False
+                st.session_state.username = ""
+                st.experimental_rerun()
+    
+    with tab2:  # Registration tab
+        st.subheader("Professor Registration")
+        
+        # Split the professor ID input into fixed prefix and customizable part
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            prof_prefix = st.text_input("Prefix", value="RRCE-", disabled=True)
+        with col2:
+            prof_id_suffix = st.text_input("Your Unique ID", help="Enter your unique identifier after RRCE-")
+        
+        prof_id = f"{prof_prefix}{prof_id_suffix}"
+        prof_email = st.text_input("Institutional Email", key="prof_email_reg")
+        prof_pass = st.text_input("Create Password", type="password", key="prof_pass_reg")
+        confirm_pass = st.text_input("Confirm Password", type="password", key="confirm_pass_reg")
+        
+        if st.button("Register as Professor"):
+            # Validation checks
+            if not prof_id_suffix:
+                st.error("Please enter your unique ID after RRCE-")
+            elif not prof_email.endswith(".edu"):
+                st.error("Please use your institutional email (.edu)")
+            elif len(prof_pass) < 8:
+                st.error("Password must be at least 8 characters")
+            elif prof_pass != confirm_pass:
+                st.error("Passwords do not match")
+            else:
+                # Check if professor ID already exists
+                conn = get_db_connection()
+                cursor = conn.execute("SELECT username FROM users WHERE username = ?", (prof_id,))
+                if cursor.fetchone():
+                    st.error("This Professor ID already exists")
+                    conn.close()
+                else:
+                    conn.close()
+                    # Send OTP for verification
+                    otp = str(random.randint(100000, 999999))
+                    if send_email_otp(prof_email, otp):
+                        st.session_state['prof_otp'] = otp
+                        st.session_state['prof_reg_data'] = (prof_id, prof_pass, "professor", prof_email)
+                        st.success("OTP sent to your email!")
+                    else:
+                        st.error("Failed to send OTP")
+        
+        if 'prof_otp' in st.session_state:
+            otp_entered = st.text_input("Enter OTP", key="prof_otp_input")
+            if st.button("Verify OTP"):
+                if otp_entered == st.session_state['prof_otp']:
+                    prof_id, prof_pass, role, prof_email = st.session_state['prof_reg_data']
+                    register_user(prof_id, prof_pass, role, prof_email)
+                    del st.session_state['prof_otp']
+                    del st.session_state['prof_reg_data']
+                    st.success("Professor registration successful! Please login.")
+                else:
+                    st.error("Incorrect OTP")
 
 elif choice == "View Recorded Video":
     st.subheader("Recorded Quiz Videos")
