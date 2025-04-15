@@ -455,7 +455,7 @@ elif choice == "Professor Panel":
                 st.experimental_rerun()
             else:
                 st.error("Invalid secret key! Access denied.")
-                return  # Don't proceed further until secret key is verified
+        return  # Don't proceed further until secret key is verified
     
     # After secret key verification, show login/registration tabs
     tab1, tab2 = st.tabs(["Professor Login", "Professor Registration"])
