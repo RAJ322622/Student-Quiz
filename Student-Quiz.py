@@ -268,8 +268,6 @@ elif choice == "Login":
                 st.error("Incorrect OTP. Please try again.")
 
 
-
-
 elif choice == "Take Quiz":
     if not st.session_state.logged_in:
         st.warning("Please login first!")
