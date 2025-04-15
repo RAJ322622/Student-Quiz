@@ -299,7 +299,7 @@ elif choice == "Login":
                     st.error(f"Database error: {str(e)}")
                 finally:
                     conn.close()
-                    st.rerun())
+                    st.rerun()
 
 elif choice == "Take Quiz":
     if not st.session_state.logged_in:
