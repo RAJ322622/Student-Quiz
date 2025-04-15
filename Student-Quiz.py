@@ -194,6 +194,8 @@ if choice == "Register":
         else:
             st.error("Incorrect OTP!")
 
+# ... [Previous imports and configuration remain the same until the Login section] ...
+
 elif choice == "Login":
     st.subheader("Login")
 
@@ -202,11 +204,15 @@ elif choice == "Login":
     password = st.text_input("Password", type="password", key="login_password")
     
     if st.button("Login"):
-        is_authenticated, user_role = authenticate_user(username, password)
-        if is_authenticated:
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT password, role FROM users WHERE username = ?", (username,))
+        user_data = cursor.fetchone()
+        conn.close()
+        
+        if user_data and user_data[0] == hash_password(password):
             st.session_state.logged_in = True
             st.session_state.username = username
-            st.session_state.role = user_role
+            st.session_state.role = user_data[1]  # Store the user's role
             st.success("Login successful!")
             st.rerun()  # Refresh to update the UI
         else:
@@ -223,10 +229,10 @@ elif choice == "Login":
 
         if user:
             otp = str(random.randint(100000, 999999))
-            st.session_state['reset_email'] = user[1]  # Store email from DB
-            st.session_state['reset_otp'] = otp
-            st.session_state['reset_user'] = user[0]  # Store username from DB
             if send_email_otp(user[1], otp):
+                st.session_state['reset_email'] = user[1]  # Store actual email from DB
+                st.session_state['reset_otp'] = otp
+                st.session_state['reset_user'] = user[0]  # Store username from DB
                 st.success("OTP sent to your email.")
             else:
                 st.error("Failed to send OTP. Please try again.")
@@ -255,29 +261,24 @@ elif choice == "Login":
                                    (st.session_state['reset_user'],))
                         conn.commit()
                         
-                        # Automatically log the user in after reset
-                        st.session_state.logged_in = True
-                        st.session_state.username = st.session_state['reset_user']
-                        cursor = conn.execute("SELECT role FROM users WHERE username = ?",
-                                            (st.session_state['reset_user'],))
-                        role = cursor.fetchone()
-                        st.session_state.role = role[0] if role else "student"
+                        st.success("Password reset successfully! Please login with your new password.")
                         
-                        st.success("Password reset successfully! You are now logged in.")
-                        
-                    except Exception as e:
-                        st.error(f"Error updating password: {e}")
-                    finally:
-                        conn.close()
                         # Clear reset-related session state
                         for key in ['reset_otp', 'reset_email', 'reset_user']:
                             if key in st.session_state:
                                 del st.session_state[key]
+                                
+                    except Exception as e:
+                        st.error(f"Error updating password: {e}")
+                    finally:
+                        conn.close()
                         st.rerun()
                 else:
                     st.error("Passwords do not match. Please try again.")
             else:
                 st.error("Incorrect OTP. Please try again.")
+
+# ... [Rest of the code remains exactly the same] ...
 
 elif choice == "Take Quiz":
     if not st.session_state.logged_in:
