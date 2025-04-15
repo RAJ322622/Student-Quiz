@@ -419,7 +419,7 @@ elif choice == "Professor Panel":
                 st.experimental_rerun()
             else:
                 st.error("Invalid secret key! Access denied.")
-        return
+    return
     
     tab1, tab2 = st.tabs(["Professor Login", "Professor Registration"])
     
