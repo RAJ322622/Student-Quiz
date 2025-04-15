@@ -192,58 +192,61 @@ if choice == "Register":
 
 elif choice == "Login":
     st.subheader("Login")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-    
+
+    # ---------- Login Form ----------
+    username = st.text_input("Username", key="login_username")
+    password = st.text_input("Password", type="password", key="login_password")
     if st.button("Login"):
         if authenticate_user(username, password):
             st.session_state.logged_in = True
             st.session_state.username = username
-            st.session_state.role = get_user_role(username)
-            st.success(f"Login successful! Welcome {username}.")
+            st.success("Login successful!")
         else:
             st.error("Invalid username or password.")
 
-    st.markdown("---")
-    st.subheader("Forgot Password")
-    recovery_email = st.text_input("Enter your registered email")
-    
-    if st.button("Send Recovery OTP"):
+    # ---------- Forgot Password ----------
+    st.markdown("### Forgot Password?")
+    forgot_email = st.text_input("Enter registered email", key="forgot_email_input")
+    if st.button("Send Reset OTP"):
         conn = get_db_connection()
-        user = conn.execute("SELECT username FROM users WHERE email = ?", (recovery_email,)).fetchone()
+        user = conn.execute("SELECT username FROM users WHERE email = ?", (forgot_email,)).fetchone()
         conn.close()
-        
+
         if user:
             otp = str(random.randint(100000, 999999))
-            if send_email_otp(recovery_email, otp):
-                st.session_state['recovery_otp'] = otp
-                st.session_state['recovery_user'] = user[0]
+            st.session_state['reset_email'] = forgot_email
+            st.session_state['reset_otp'] = otp
+            st.session_state['reset_user'] = user[0]
+            if send_email_otp(forgot_email, otp):
                 st.success("OTP sent to your email.")
-            else:
-                st.error("Failed to send OTP. Please try again.")
         else:
-            st.error("Email not found in our system.")
+            st.error("Email not registered.")
 
-    if 'recovery_otp' in st.session_state:
-        recovery_otp = st.text_input("Enter recovery OTP")
-        new_password = st.text_input("New Password", type="password")
-        confirm_password = st.text_input("Confirm New Password", type="password")
-        
+    # ---------- Reset Password ----------
+    if 'reset_otp' in st.session_state and 'reset_email' in st.session_state:
+        st.markdown("### Reset Your Password")
+        entered_otp = st.text_input("Enter OTP to reset password", key="reset_otp_input")
+        new_password = st.text_input("New Password", type="password", key="reset_new_password")
+        confirm_password = st.text_input("Confirm New Password", type="password", key="reset_confirm_password")
+
         if st.button("Reset Password"):
-            if recovery_otp == st.session_state['recovery_otp']:
+            if entered_otp == st.session_state.get('reset_otp'):
                 if new_password == confirm_password:
                     conn = get_db_connection()
                     conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                                 (hash_password(new_password), st.session_state['recovery_user']))
+                                 (hash_password(new_password), st.session_state['reset_user']))
                     conn.commit()
                     conn.close()
-                    st.success("Password reset successfully!")
-                    del st.session_state['recovery_otp']
-                    del st.session_state['recovery_user']
+                    st.success("Password reset successfully! You can now log in.")
+
+                    # Clear session
+                    del st.session_state['reset_otp']
+                    del st.session_state['reset_email']
+                    del st.session_state['reset_user']
                 else:
-                    st.error("Passwords do not match!")
+                    st.error("Passwords do not match. Please try again.")
             else:
-                st.error("Invalid OTP!")
+                st.error("Incorrect OTP. Please try again.")
 
 elif choice == "Take Quiz":
     if not st.session_state.logged_in:
@@ -367,7 +370,7 @@ Time Taken: {time_taken} seconds""")
                         st.session_state.quiz_submitted = True
                         st.session_state.camera_active = False
                         remove_active_student(username)
-                        st.success(f"Quiz submitted! Your score: {score}/{len(QUESTIONS)}")
+                        st.success(f"Quiz submitted! and result's sent Your score on Mail: {score}/{len(QUESTIONS)}")
 
 elif choice == "Change Password":
     if not st.session_state.logged_in:
