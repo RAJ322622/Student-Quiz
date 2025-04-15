@@ -26,8 +26,8 @@ EMAIL_PASSWORD = "kcxf lzrq xnts xlng"  # App Password
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
-# Secret key for professor panel (change this to a strong secret in production)
-PROFESSOR_SECRET_KEY = "prof_secure_key_123"
+# Secret key for professor panel
+PROFESSOR_SECRET_KEY = "RRCE@123"  # Changed to your specified secret key
 
 # Initialize session state
 if 'logged_in' not in st.session_state:
@@ -445,19 +445,26 @@ elif choice == "Change Password":
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
     
-    # Professor login/registration tabs
-    tab1, tab2 = st.tabs(["Professor Login", "Professor Registration"])
-    
-    with tab1:  # Login tab
-        if not st.session_state.get('prof_verified', False):
-            prof_id = st.text_input("Professor ID")
-            prof_pass = st.text_input("Professor Password", type="password")
-            secret_key = st.text_input("Enter Professor Secret Key", type="password")
-            
-            if st.button("Login as Professor"):
-                if secret_key != PROFESSOR_SECRET_KEY:
-                    st.error("Invalid secret key!")
-                else:
+    # First check for secret key before showing anything
+    if not st.session_state.get('prof_verified', False):
+        secret_key = st.text_input("Enter Professor Secret Key to continue", type="password")
+        
+        if st.button("Verify Key"):
+            if secret_key == PROFESSOR_SECRET_KEY:
+                st.session_state.prof_verified = True
+                st.experimental_rerun()
+            else:
+                st.error("Invalid secret key! Access denied.")
+    else:
+        # Professor dashboard tabs
+        tab1, tab2 = st.tabs(["Professor Login", "Professor Registration"])
+        
+        with tab1:  # Login tab
+            if not st.session_state.get('prof_verified', False):
+                prof_id = st.text_input("Professor ID")
+                prof_pass = st.text_input("Professor Password", type="password")
+                
+                if st.button("Login as Professor"):
                     conn = get_db_connection()
                     cursor = conn.execute("SELECT password, role, email FROM users WHERE username = ? AND role = 'professor'", 
                                         (prof_id,))
@@ -490,157 +497,157 @@ elif choice == "Professor Panel":
                             st.error(f"Login notification failed: {e}")
                     else:
                         st.error("Invalid Professor credentials")
-        else:
-            st.success(f"Welcome Professor {st.session_state.username}!")
-            
-            # Professor dashboard
-            st.subheader("Student Results Management")
-            
-            # View results
-            st.markdown("### 📊 View Results")
-            
-            # Check for all available result files
-            result_files = []
-            if os.path.exists(PROF_CSV_FILE):
-                result_files.append(PROF_CSV_FILE)
-            
-            # Also check for section-wise files
-            section_files = [f for f in os.listdir() if f.endswith("_results.csv")]
-            result_files.extend(section_files)
-            
-            if result_files:
-                selected_file = st.selectbox("Select results file", result_files)
-                try:
-                    df = pd.read_csv(selected_file)
+            else:
+                st.success(f"Welcome Professor {st.session_state.username}!")
+                
+                # Professor dashboard
+                st.subheader("Student Results Management")
+                
+                # View results
+                st.markdown("### 📊 View Results")
+                
+                # Check for all available result files
+                result_files = []
+                if os.path.exists(PROF_CSV_FILE):
+                    result_files.append(PROF_CSV_FILE)
+                
+                # Also check for section-wise files
+                section_files = [f for f in os.listdir() if f.endswith("_results.csv")]
+                result_files.extend(section_files)
+                
+                if result_files:
+                    selected_file = st.selectbox("Select results file", result_files)
+                    try:
+                        df = pd.read_csv(selected_file)
+                        
+                        # Display statistics
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Total Students", len(df))
+                        with col2:
+                            avg_score = df['Score'].mean()
+                            st.metric("Average Score", f"{avg_score:.1f}/{len(QUESTIONS)}")
+                        with col3:
+                            pass_rate = (len(df[df['Score'] >= len(QUESTIONS)/2]) / len(df)) * 100
+                            st.metric("Pass Rate", f"{pass_rate:.1f}%")
+
+                        # Show full results with sorting options
+                        st.markdown("### Detailed Results")
+                        sort_by = st.selectbox("Sort by", ["Score", "Time_Taken", "Timestamp", "Section"])
+                        ascending = st.checkbox("Ascending order", True)
+                        sorted_df = df.sort_values(by=sort_by, ascending=ascending)
+                        st.dataframe(sorted_df)
+                        
+                        # Download option
+                        st.download_button(
+                            label="Download Results",
+                            data=sorted_df.to_csv(index=False),
+                            file_name=f"sorted_{selected_file}",
+                            mime="text/csv"
+                        )
+                        
+                        # Visualization
+                        st.markdown("### 📈 Performance Visualization")
+                        chart_type = st.selectbox("Select chart type", ["Bar Chart", "Histogram", "Pie Chart"])
+                        
+                        if chart_type == "Bar Chart":
+                            st.bar_chart(df['Score'].value_counts().sort_index())
+                        elif chart_type == "Histogram":
+                            st.bar_chart(df['Score'])
+                        elif chart_type == "Pie Chart":
+                            pie_data = df['Score'].value_counts()
+                            st.pyplot(pie_data.plot.pie(autopct="%1.1f%%", figsize=(8, 8)).figure)
+                        
+                    except Exception as e:
+                        st.error(f"Error loading results: {e}")
+                else:
+                    st.warning("No results available yet.")
+                
+                # Section-wise analysis
+                st.markdown("---")
+                st.markdown("### 📈 Section Analysis")
+                if result_files and 'Section' in df.columns:
+                    sections = df['Section'].unique()
+                    selected_section = st.selectbox("Select section", sections)
                     
-                    # Display statistics
+                    section_df = df[df['Section'] == selected_section]
+                    st.write(f"Results for {selected_section} section:")
+                    
+                    # Section statistics
                     col1, col2, col3 = st.columns(3)
                     with col1:
-                        st.metric("Total Students", len(df))
+                        st.metric(f"Students in {selected_section}", len(section_df))
                     with col2:
-                        avg_score = df['Score'].mean()
-                        st.metric("Average Score", f"{avg_score:.1f}/{len(QUESTIONS)}")
+                        section_avg = section_df['Score'].mean()
+                        st.metric("Average Score", f"{section_avg:.1f}/{len(QUESTIONS)}")
                     with col3:
-                        pass_rate = (len(df[df['Score'] >= len(QUESTIONS)/2]) / len(df) * 100
-                        st.metric("Pass Rate", f"{pass_rate:.1f}%")
-
-                    # Show full results with sorting options
-                    st.markdown("### Detailed Results")
-                    sort_by = st.selectbox("Sort by", ["Score", "Time_Taken", "Timestamp", "Section"])
-                    ascending = st.checkbox("Ascending order", True)
-                    sorted_df = df.sort_values(by=sort_by, ascending=ascending)
-                    st.dataframe(sorted_df)
+                        section_pass = (len(section_df[section_df['Score'] >= len(QUESTIONS)/2]) / len(section_df)) * 100
+                        st.metric("Pass Rate", f"{section_pass:.1f}%")
                     
-                    # Download option
-                    st.download_button(
-                        label="Download Results",
-                        data=sorted_df.to_csv(index=False),
-                        file_name=f"sorted_{selected_file}",
-                        mime="text/csv"
-                    )
+                    st.dataframe(section_df)
                     
                     # Visualization
-                    st.markdown("### 📈 Performance Visualization")
-                    chart_type = st.selectbox("Select chart type", ["Bar Chart", "Histogram", "Pie Chart"])
-                    
-                    if chart_type == "Bar Chart":
-                        st.bar_chart(df['Score'].value_counts().sort_index())
-                    elif chart_type == "Histogram":
-                        st.bar_chart(df['Score'])
-                    elif chart_type == "Pie Chart":
-                        pie_data = df['Score'].value_counts()
-                        st.pyplot(pie_data.plot.pie(autopct="%1.1f%%", figsize=(8, 8)).figure
-                    
-                except Exception as e:
-                    st.error(f"Error loading results: {e}")
-            else:
-                st.warning("No results available yet.")
-            
-            # Section-wise analysis
-            st.markdown("---")
-            st.markdown("### 📈 Section Analysis")
-            if result_files and 'Section' in df.columns:
-                sections = df['Section'].unique()
-                selected_section = st.selectbox("Select section", sections)
+                    st.bar_chart(section_df['Score'].value_counts().sort_index())
+                else:
+                    st.warning("No section data available.")
                 
-                section_df = df[df['Section'] == selected_section]
-                st.write(f"Results for {selected_section} section:")
-                
-                # Section statistics
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric(f"Students in {selected_section}", len(section_df))
-                with col2:
-                    section_avg = section_df['Score'].mean()
-                    st.metric("Average Score", f"{section_avg:.1f}/{len(QUESTIONS)}")
-                with col3:
-                    section_pass = (len(section_df[section_df['Score'] >= len(QUESTIONS)/2]) / len(section_df)) * 100
-                    st.metric("Pass Rate", f"{section_pass:.1f}%")
-                
-                st.dataframe(section_df)
-                
-                # Visualization
-                st.bar_chart(section_df['Score'].value_counts().sort_index())
-            else:
-                st.warning("No section data available.")
-            
-            # Upload results
-            st.markdown("---")
-            st.markdown("### 📤 Upload Results")
-            uploaded_file = st.file_uploader("Upload student results (CSV)", type="csv")
-            if uploaded_file is not None:
-                try:
-                    new_df = pd.read_csv(uploaded_file)
-                    if all(col in new_df.columns for col in ["Username", "USN", "Section", "Score", "Timestamp"]):
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        save_path = os.path.join(st.session_state.prof_dir, f"uploaded_{timestamp}.csv")
-                        new_df.to_csv(save_path, index=False)
-                        st.success(f"Results saved as uploaded_{timestamp}.csv")
-                    else:
-                        st.error("CSV missing required columns!")
-                except Exception as e:
-                    st.error(f"Error processing file: {e}")
-            
-            # Logout button
-            if st.button("Logout"):
-                st.session_state.prof_verified = False
-                st.session_state.username = ""
-                st.session_state.role = ""
-                st.experimental_rerun()
-    
-    with tab2:  # Registration tab
-        st.subheader("Professor Registration")
-        st.warning("Professor accounts require verification.")
-        
-        # Registration form
-        full_name = st.text_input("Full Name")
-        designation = st.text_input("Designation")
-        department = st.selectbox("Department", ["CSE", "ISE", "ECE", "EEE", "MECH", "CIVIL"])
-        institutional_email = st.text_input("Institutional Email")
-        secret_key = st.text_input("Enter Registration Secret Key", type="password")
-        
-        if st.button("Request Account"):
-            if secret_key != PROFESSOR_SECRET_KEY:
-                st.error("Invalid secret key!")
-            elif full_name and designation and department and institutional_email:
-                # Generate credentials
-                prof_id = f"PROF-{random.randint(10000, 99999)}"
-                temp_password = str(random.randint(100000, 999999))
-                
-                # Register professor
-                conn = get_db_connection()
-                try:
-                    conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
-                                (prof_id, hash_password(temp_password), "professor", institutional_email))
-                    conn.commit()
-                    
-                    # Create directory
-                    os.makedirs(f"professor_data/{prof_id}", exist_ok=True)
-                    
-                    # Send credentials
+                # Upload results
+                st.markdown("---")
+                st.markdown("### 📤 Upload Results")
+                uploaded_file = st.file_uploader("Upload student results (CSV)", type="csv")
+                if uploaded_file is not None:
                     try:
-                        msg = EmailMessage()
-                        msg.set_content(f"""Dear {full_name},
+                        new_df = pd.read_csv(uploaded_file)
+                        if all(col in new_df.columns for col in ["Username", "USN", "Section", "Score", "Timestamp"]):
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            save_path = os.path.join(st.session_state.prof_dir, f"uploaded_{timestamp}.csv")
+                            new_df.to_csv(save_path, index=False)
+                            st.success(f"Results saved as uploaded_{timestamp}.csv")
+                        else:
+                            st.error("CSV missing required columns!")
+                    except Exception as e:
+                        st.error(f"Error processing file: {e}")
+                
+                # Logout button
+                if st.button("Logout"):
+                    st.session_state.prof_verified = False
+                    st.session_state.username = ""
+                    st.session_state.role = ""
+                    st.experimental_rerun()
+        
+        with tab2:  # Registration tab
+            st.subheader("Professor Registration")
+            st.warning("Professor accounts require verification.")
+            
+            # Registration form
+            full_name = st.text_input("Full Name")
+            designation = st.text_input("Designation")
+            department = st.selectbox("Department", ["CSE", "ISE", "ECE", "EEE", "MECH", "CIVIL"])
+            institutional_email = st.text_input("Institutional Email")
+            secret_key = st.text_input("Enter Registration Secret Key", type="password")
+            
+            if st.button("Request Account"):
+                if secret_key != PROFESSOR_SECRET_KEY:
+                    st.error("Invalid secret key!")
+                elif full_name and designation and department and institutional_email:
+                    # Generate credentials
+                    prof_id = f"PROF-{random.randint(10000, 99999)}"
+                    temp_password = str(random.randint(100000, 999999))
+                    
+                    # Register professor
+                    conn = get_db_connection()
+                    try:
+                        conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
+                                    (prof_id, hash_password(temp_password), "professor", institutional_email))
+                        conn.commit()
+                        
+                        # Create directory
+                        os.makedirs(f"professor_data/{prof_id}", exist_ok=True)
+                        
+                        # Send credentials
+                        try:
+                            msg = EmailMessage()
+                            msg.set_content(f"""Dear {full_name},
 
 Your professor account has been created:
 
@@ -651,29 +658,37 @@ Please login and change your password immediately.
 
 Regards,
 Quiz App Team""")
-                        msg['Subject'] = "Professor Account Credentials"
-                        msg['From'] = EMAIL_SENDER
-                        msg['To'] = institutional_email
+                            msg['Subject'] = "Professor Account Credentials"
+                            msg['From'] = EMAIL_SENDER
+                            msg['To'] = institutional_email
 
-                        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-                        server.starttls()
-                        server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-                        server.send_message(msg)
-                        server.quit()
-                        
-                        st.success("Account created! Credentials sent to your email.")
-                    except Exception as e:
-                        st.error(f"Account created but email failed: {e}")
-                except sqlite3.IntegrityError:
-                    st.error("Professor with this email already exists!")
-                finally:
-                    conn.close()
-            else:
-                st.error("Please fill all fields!")
+                            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+                            server.starttls()
+                            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                            server.send_message(msg)
+                            server.quit()
+                            
+                            st.success("Account created! Credentials sent to your email.")
+                        except Exception as e:
+                            st.error(f"Account created but email failed: {e}")
+                    except sqlite3.IntegrityError:
+                        st.error("Professor with this email already exists!")
+                    finally:
+                        conn.close()
+                else:
+                    st.error("Please fill all fields!")
 
 elif choice == "Professor Monitoring Panel":
+    # First check for secret key
     if not st.session_state.get('prof_verified', False):
-        st.warning("Please login as professor first!")
+        secret_key = st.text_input("Enter Professor Secret Key to continue", type="password")
+        
+        if st.button("Verify Key"):
+            if secret_key == PROFESSOR_SECRET_KEY:
+                st.session_state.prof_verified = True
+                st.experimental_rerun()
+            else:
+                st.error("Invalid secret key! Access denied.")
     else:
         st_autorefresh(interval=10000, key="monitor_refresh")  # Refresh every 10 seconds
         
