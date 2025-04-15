@@ -196,18 +196,26 @@ elif choice == "Login":
     # ---------- Login Form ----------
     username = st.text_input("Username", key="login_username")
     password = st.text_input("Password", type="password", key="login_password")
+    
     if st.button("Login"):
-        if authenticate_user(username, password):
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT password, role FROM users WHERE username = ?", (username,))
+        user_data = cursor.fetchone()
+        conn.close()
+        
+        if user_data and user_data[0] == hash_password(password):
             st.session_state.logged_in = True
             st.session_state.username = username
-            st.session_state.role = get_user_role(username)  # Added this line to store role
+            st.session_state.role = user_data[1]  # Store the user's role
             st.success("Login successful!")
+            st.rerun()  # Refresh to update the UI
         else:
             st.error("Invalid username or password.")
 
     # ---------- Forgot Password ----------
     st.markdown("### Forgot Password?")
     forgot_email = st.text_input("Enter registered email", key="forgot_email_input")
+    
     if st.button("Send Reset OTP"):
         conn = get_db_connection()
         user = conn.execute("SELECT username, email FROM users WHERE email = ?", (forgot_email,)).fetchone()
@@ -215,10 +223,10 @@ elif choice == "Login":
 
         if user:
             otp = str(random.randint(100000, 999999))
-            st.session_state['reset_email'] = user[1]  # Store email from DB
-            st.session_state['reset_otp'] = otp
-            st.session_state['reset_user'] = user[0]  # Store username from DB
             if send_email_otp(user[1], otp):
+                st.session_state['reset_email'] = user[1]  # Store actual email from DB
+                st.session_state['reset_otp'] = otp
+                st.session_state['reset_user'] = user[0]  # Store username from DB
                 st.success("OTP sent to your email.")
             else:
                 st.error("Failed to send OTP. Please try again.")
@@ -239,24 +247,33 @@ elif choice == "Login":
                     try:
                         # Update password in database
                         conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                                    (hash_password(new_password), st.session_state['reset_user']))
+                                   (hash_password(new_password), st.session_state['reset_user']))
                         conn.commit()
-                        st.success("Password reset successfully! You can now log in.")
                         
-                        # Clear the password change count restriction
-                        conn.execute("DELETE FROM password_changes WHERE username = ?", 
-                                    (st.session_state['reset_user'],))
+                        # Clear any password change restrictions
+                        conn.execute("DELETE FROM password_changes WHERE username = ?",
+                                   (st.session_state['reset_user'],))
                         conn.commit()
+                        
+                        st.success("Password reset successfully! Please login with your new password.")
+                        
+                        # Automatically log the user in after reset
+                        st.session_state.logged_in = True
+                        st.session_state.username = st.session_state['reset_user']
+                        cursor = conn.execute("SELECT role FROM users WHERE username = ?",
+                                            (st.session_state['reset_user'],))
+                        role = cursor.fetchone()
+                        st.session_state.role = role[0] if role else "student"
+                        
                     except Exception as e:
                         st.error(f"Error updating password: {e}")
                     finally:
                         conn.close()
-
-                    # Clear session state
-                    keys_to_delete = ['reset_otp', 'reset_email', 'reset_user']
-                    for key in keys_to_delete:
-                        if key in st.session_state:
-                            del st.session_state[key]
+                        # Clear reset-related session state
+                        for key in ['reset_otp', 'reset_email', 'reset_user']:
+                            if key in st.session_state:
+                                del st.session_state[key]
+                        st.rerun()
                 else:
                     st.error("Passwords do not match. Please try again.")
             else:
