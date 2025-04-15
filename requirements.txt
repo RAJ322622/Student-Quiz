@@ -5,3 +5,4 @@ streamlit-autorefresh
 gTTS
 opencv-python-headless
 sendgrid
+send_email
