@@ -26,6 +26,9 @@ EMAIL_PASSWORD = "kcxf lzrq xnts xlng"  # App Password
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
+# Secret key for professor panel (change this to a strong secret in production)
+PROFESSOR_SECRET_KEY = "prof_secure_key_123"
+
 # Initialize session state
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
@@ -41,6 +44,8 @@ if 'usn' not in st.session_state:
     st.session_state.usn = ""
 if 'section' not in st.session_state:
     st.session_state.section = ""
+if 'prof_dir' not in st.session_state:
+    st.session_state.prof_dir = "professor_data"
 
 # Database functions
 def get_db_connection():
@@ -447,41 +452,44 @@ elif choice == "Professor Panel":
         if not st.session_state.get('prof_verified', False):
             prof_id = st.text_input("Professor ID")
             prof_pass = st.text_input("Professor Password", type="password")
+            secret_key = st.text_input("Enter Professor Secret Key", type="password")
             
             if st.button("Login as Professor"):
-                conn = get_db_connection()
-                cursor = conn.execute("SELECT password, role, email FROM users WHERE username = ? AND role = 'professor'", 
-                                    (prof_id,))
-                prof_data = cursor.fetchone()
-                conn.close()
-                
-                if prof_data and prof_data[0] == hash_password(prof_pass):
-                    st.session_state.prof_verified = True
-                    st.session_state.username = prof_id
-                    st.session_state.role = "professor"
-                    st.success(f"Welcome Professor {prof_id}!")
-                    
-                    # Create professor directory
-                    os.makedirs(f"professor_data/{prof_id}", exist_ok=True)
-                    st.session_state.prof_dir = f"professor_data/{prof_id}"
-                    
-                    # Send login notification
-                    try:
-                        msg = EmailMessage()
-                        msg.set_content(f"Professor {prof_id} logged in at {datetime.now()}")
-                        msg['Subject'] = "Professor Login Notification"
-                        msg['From'] = EMAIL_SENDER
-                        msg['To'] = prof_data[2]  # Professor's email
-
-                        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-                        server.starttls()
-                        server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-                        server.send_message(msg)
-                        server.quit()
-                    except Exception as e:
-                        st.error(f"Login notification failed: {e}")
+                if secret_key != PROFESSOR_SECRET_KEY:
+                    st.error("Invalid secret key!")
                 else:
-                    st.error("Invalid Professor credentials")
+                    conn = get_db_connection()
+                    cursor = conn.execute("SELECT password, role, email FROM users WHERE username = ? AND role = 'professor'", 
+                                        (prof_id,))
+                    prof_data = cursor.fetchone()
+                    conn.close()
+                    
+                    if prof_data and prof_data[0] == hash_password(prof_pass):
+                        st.session_state.prof_verified = True
+                        st.session_state.username = prof_id
+                        st.session_state.role = "professor"
+                        st.success(f"Welcome Professor {prof_id}!")
+                        
+                        # Create professor directory if it doesn't exist
+                        os.makedirs(st.session_state.prof_dir, exist_ok=True)
+                        
+                        # Send login notification
+                        try:
+                            msg = EmailMessage()
+                            msg.set_content(f"Professor {prof_id} logged in at {datetime.now()}")
+                            msg['Subject'] = "Professor Login Notification"
+                            msg['From'] = EMAIL_SENDER
+                            msg['To'] = prof_data[2]  # Professor's email
+
+                            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+                            server.starttls()
+                            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                            server.send_message(msg)
+                            server.quit()
+                        except Exception as e:
+                            st.error(f"Login notification failed: {e}")
+                    else:
+                        st.error("Invalid Professor credentials")
         else:
             st.success(f"Welcome Professor {st.session_state.username}!")
             
@@ -490,47 +498,85 @@ elif choice == "Professor Panel":
             
             # View results
             st.markdown("### 📊 View Results")
+            
+            # Check for all available result files
             result_files = []
-            if os.path.exists(st.session_state.prof_dir):
-                result_files = [f for f in os.listdir(st.session_state.prof_dir) if f.endswith(".csv")]
+            if os.path.exists(PROF_CSV_FILE):
+                result_files.append(PROF_CSV_FILE)
+            
+            # Also check for section-wise files
+            section_files = [f for f in os.listdir() if f.endswith("_results.csv")]
+            result_files.extend(section_files)
             
             if result_files:
                 selected_file = st.selectbox("Select results file", result_files)
-                df = pd.read_csv(f"{st.session_state.prof_dir}/{selected_file}")
-                
-                # Display statistics
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Total Students", len(df))
-                with col2:
-                    st.metric("Average Score", f"{df['Score'].mean():.1f}/{len(QUESTIONS)}")
-                with col3:
-                    st.metric("Pass Rate", f"{(len(df[df['Score'] >= len(QUESTIONS)/2]) / len(df) * 100):.1f}%")
+                try:
+                    df = pd.read_csv(selected_file)
+                    
+                    # Display statistics
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Total Students", len(df))
+                    with col2:
+                        avg_score = df['Score'].mean()
+                        st.metric("Average Score", f"{avg_score:.1f}/{len(QUESTIONS)}")
+                    with col3:
+                        pass_rate = (len(df[df['Score'] >= len(QUESTIONS)/2]) / len(df) * 100
+                        st.metric("Pass Rate", f"{pass_rate:.1f}%")
 
-                
-                # Show full results
-                st.dataframe(df)
-                
-                # Download option
-                st.download_button(
-                    label="Download Results",
-                    data=df.to_csv(index=False),
-                    file_name=selected_file,
-                    mime="text/csv"
-                )
+                    # Show full results with sorting options
+                    st.markdown("### Detailed Results")
+                    sort_by = st.selectbox("Sort by", ["Score", "Time_Taken", "Timestamp", "Section"])
+                    ascending = st.checkbox("Ascending order", True)
+                    sorted_df = df.sort_values(by=sort_by, ascending=ascending)
+                    st.dataframe(sorted_df)
+                    
+                    # Download option
+                    st.download_button(
+                        label="Download Results",
+                        data=sorted_df.to_csv(index=False),
+                        file_name=f"sorted_{selected_file}",
+                        mime="text/csv"
+                    )
+                    
+                    # Visualization
+                    st.markdown("### 📈 Performance Visualization")
+                    chart_type = st.selectbox("Select chart type", ["Bar Chart", "Histogram", "Pie Chart"])
+                    
+                    if chart_type == "Bar Chart":
+                        st.bar_chart(df['Score'].value_counts().sort_index())
+                    elif chart_type == "Histogram":
+                        st.bar_chart(df['Score'])
+                    elif chart_type == "Pie Chart":
+                        pie_data = df['Score'].value_counts()
+                        st.pyplot(pie_data.plot.pie(autopct="%1.1f%%", figsize=(8, 8)).figure
+                    
+                except Exception as e:
+                    st.error(f"Error loading results: {e}")
             else:
                 st.warning("No results available yet.")
             
             # Section-wise analysis
             st.markdown("---")
             st.markdown("### 📈 Section Analysis")
-            if result_files:
-                selected_df = pd.read_csv(f"{st.session_state.prof_dir}/{selected_file}")
-                sections = selected_df['Section'].unique()
+            if result_files and 'Section' in df.columns:
+                sections = df['Section'].unique()
                 selected_section = st.selectbox("Select section", sections)
                 
-                section_df = selected_df[selected_df['Section'] == selected_section]
+                section_df = df[df['Section'] == selected_section]
                 st.write(f"Results for {selected_section} section:")
+                
+                # Section statistics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric(f"Students in {selected_section}", len(section_df))
+                with col2:
+                    section_avg = section_df['Score'].mean()
+                    st.metric("Average Score", f"{section_avg:.1f}/{len(QUESTIONS)}")
+                with col3:
+                    section_pass = (len(section_df[section_df['Score'] >= len(QUESTIONS)/2]) / len(section_df)) * 100
+                    st.metric("Pass Rate", f"{section_pass:.1f}%")
+                
                 st.dataframe(section_df)
                 
                 # Visualization
@@ -547,7 +593,7 @@ elif choice == "Professor Panel":
                     new_df = pd.read_csv(uploaded_file)
                     if all(col in new_df.columns for col in ["Username", "USN", "Section", "Score", "Timestamp"]):
                         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        save_path = f"{st.session_state.prof_dir}/uploaded_{timestamp}.csv"
+                        save_path = os.path.join(st.session_state.prof_dir, f"uploaded_{timestamp}.csv")
                         new_df.to_csv(save_path, index=False)
                         st.success(f"Results saved as uploaded_{timestamp}.csv")
                     else:
@@ -571,9 +617,12 @@ elif choice == "Professor Panel":
         designation = st.text_input("Designation")
         department = st.selectbox("Department", ["CSE", "ISE", "ECE", "EEE", "MECH", "CIVIL"])
         institutional_email = st.text_input("Institutional Email")
+        secret_key = st.text_input("Enter Registration Secret Key", type="password")
         
         if st.button("Request Account"):
-            if full_name and designation and department and institutional_email:
+            if secret_key != PROFESSOR_SECRET_KEY:
+                st.error("Invalid secret key!")
+            elif full_name and designation and department and institutional_email:
                 # Generate credentials
                 prof_id = f"PROF-{random.randint(10000, 99999)}"
                 temp_password = str(random.randint(100000, 999999))
@@ -638,6 +687,16 @@ elif choice == "Professor Monitoring Panel":
             st.write(f"Active students ({len(live_students)}):")
             for student in live_students:
                 st.write(f"- {student}")
+                
+            # Display recent quiz submissions
+            st.markdown("---")
+            st.markdown("### Recent Quiz Submissions")
+            if os.path.exists(PROF_CSV_FILE):
+                df = pd.read_csv(PROF_CSV_FILE)
+                recent_submissions = df.sort_values("Timestamp", ascending=False).head(5)
+                st.dataframe(recent_submissions)
+            else:
+                st.warning("No quiz submissions yet.")
 
 elif choice == "View Recorded Video":
     st.subheader("Recorded Sessions")
