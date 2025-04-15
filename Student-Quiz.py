@@ -193,6 +193,9 @@ if choice == "Register":
 elif choice == "Login":
     st.subheader("Login")
 
+  elif choice == "Login":
+    st.subheader("Login")
+
     # ---------- Login Form ----------
     username = st.text_input("Username", key="login_username")
     password = st.text_input("Password", type="password", key="login_password")
