@@ -1,7 +1,8 @@
 streamlit
 pandas
 streamlit-webrtc
-streamlit_autorefresh
+streamlit-autorefresh
 gTTS
 opencv-python-headless
 sendgrid
+sqlite3
