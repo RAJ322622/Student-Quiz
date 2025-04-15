@@ -163,8 +163,56 @@ def get_live_students():
 
 # Dummy question bank
 QUESTIONS = [
-    {"question": "What is the format specifier for an integer in C?", "options": ["%c", "%d", "%f", "%s"], "answer": "%d"},
-    {"question": "Which loop is used when the number of iterations is known?", "options": ["while", "do-while", "for", "if"], "answer": "for"},
+    {
+        "question": "Which keyword is used to define a constant in C?",
+        "options": ["const", "#define", "static", "let"],
+        "answer": "const"
+    },
+    {
+        "question": "What is the output of `print(3 * 'a' in Python)?",
+        "options": ["aaa", "a a a", "Error", "True"],
+        "answer": "aaa"
+    },
+    {
+        "question": "Which data structure uses FIFO (First-In-First-Out)?",
+        "options": ["Stack", "Queue", "Array", "Linked List"],
+        "answer": "Queue"
+    },
+    {
+        "question": "What does `sizeof(int)` return in a 32-bit system?",
+        "options": ["2", "4", "8", "Compiler-dependent"],
+        "answer": "4"
+    },
+    {
+        "question": "Which Python function converts a string to lowercase?",
+        "options": ["str.lower()", "string.lower()", "toLower()", "lowercase()"],
+        "answer": "str.lower()"
+    },
+    {
+        "question": "What is the time complexity of binary search?",
+        "options": ["O(n)", "O(log n)", "O(n²)", "O(1)"],
+        "answer": "O(log n)"
+    },
+    {
+        "question": "Which operator is used for pointer dereferencing in C?",
+        "options": ["&", "*", "->", "::"],
+        "answer": "*"
+    },
+    {
+        "question": "What does `'hello'.replace('l', 'x')` return in Python?",
+        "options": ["hexxo", "hexlo", "helxo", "Error"],
+        "answer": "hexxo"
+    },
+    {
+        "question": "Which header file is needed for `printf()` in C?",
+        "options": ["<stdio.h>", "<stdlib.h>", "<math.h>", "<string.h>"],
+        "answer": "<stdio.h>"
+    },
+    {
+        "question": "What is the default return type of a function in C if not specified?",
+        "options": ["void", "int", "char", "float"],
+        "answer": "int"
+    }
 ]
 
 # Video processor
