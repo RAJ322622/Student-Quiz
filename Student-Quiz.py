@@ -488,19 +488,26 @@ elif choice == "Professor Panel":
                 if prof_data and prof_data[1] == "professor" and prof_data[0] == hash_password(prof_pass):
                     st.session_state.prof_verified = True
                     st.session_state.username = prof_id
-                    st.success("Professor login successful!")
+                    st.success(f"Login successful! Welcome Professor {prof_id}")
+                    
+                    # Create professor-specific CSV file path
+                    PROF_CSV_FILE = f"prof_{prof_id}_results.csv"
+                    st.session_state.prof_csv_file = PROF_CSV_FILE
                 else:
                     st.error("Invalid Professor ID or password")
         else:
             st.success(f"Welcome Professor {st.session_state.username}!")
             
             # Professor dashboard after login
+            PROF_CSV_FILE = st.session_state.prof_csv_file
             if os.path.exists(PROF_CSV_FILE):
                 with open(PROF_CSV_FILE, "rb") as file:
-                    st.download_button("\U0001F4E5 Download Results CSV", file, "prof_quiz_results.csv", mime="text/csv")
+                    st.download_button("\U0001F4E5 Download Results CSV", file, 
+                                      f"{st.session_state.username}_quiz_results.csv", 
+                                      mime="text/csv")
                 
                 # Show results preview
-                st.subheader("Quiz Results Preview")
+                st.subheader("Your Quiz Results Preview")
                 prof_df = pd.read_csv(PROF_CSV_FILE)
                 st.dataframe(prof_df)
             else:
@@ -509,6 +516,7 @@ elif choice == "Professor Panel":
             if st.button("Logout Professor"):
                 st.session_state.prof_verified = False
                 st.session_state.username = ""
+                st.session_state.prof_csv_file = ""
                 st.experimental_rerun()
     
     with tab2:  # Registration tab
@@ -520,7 +528,7 @@ elif choice == "Professor Panel":
         # Display instruction about the prefix
         st.markdown("""
         <div style='background-color:#f0f2f6; padding:10px; border-radius:5px; margin-bottom:10px;'>
-        <b>Note:</b> Your Professor ID will automatically start with <code></code>
+        <b>Note:</b> Your Professor ID will automatically start with <code>RRCE-</code>
         </div>
         """, unsafe_allow_html=True)
         
@@ -553,16 +561,37 @@ elif choice == "Professor Panel":
                     st.error("This Professor ID already exists")
                     conn.close()
                 else:
+                    # Store professor data in database
+                    hashed_pass = hash_password(prof_pass)
+                    conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
+                               (prof_id, hashed_pass, "professor", prof_email))
+                    conn.commit()
                     conn.close()
-                    # Send OTP for verification
-                    otp = str(random.randint(100000, 999999))
-                    if send_email_otp(prof_email, otp):
-                        st.session_state['prof_otp'] = otp
-                        st.session_state['prof_reg_data'] = (prof_id, prof_pass, "professor", prof_email)
-                        st.success("OTP sent to your email!")
+                    
+                    # Send registration confirmation with credentials
+                    email_subject = "Professor Registration Successful"
+                    email_body = f"""
+                    <html>
+                        <body>
+                            <h2>Professor Registration Successful</h2>
+                            <p>Your professor account has been successfully created.</p>
+                            <p><strong>Professor ID:</strong> {prof_id}</p>
+                            <p><strong>Password:</strong> {prof_pass}</p>
+                            <p>Please keep these credentials secure and do not share them.</p>
+                            <p>You can now login to the Professor Panel using these credentials.</p>
+                        </body>
+                    </html>
+                    """
+                    
+                    if send_email(prof_email, email_subject, email_body):
+                        st.success("Registration successful! Your credentials have been sent to your email.")
+                        # Clear the input fields
+                        st.session_state.prof_id_suffix = ""
+                        st.session_state.prof_email_reg = ""
+                        st.session_state.prof_pass_reg = ""
+                        st.session_state.confirm_pass_reg = ""
                     else:
-                        st.error("Failed to send OTP")
-
+                        st.error("Registration completed but failed to send confirmation email")
 elif choice == "View Recorded Video":
     st.subheader("Recorded Quiz Videos")
     video_files = [f for f in os.listdir(RECORDING_DIR) if f.endswith(".mp4")]
