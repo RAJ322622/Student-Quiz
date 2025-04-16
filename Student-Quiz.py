@@ -196,22 +196,29 @@ if choice == "Register":
 elif choice == "Login":
     st.subheader("Login")
 
-    # Login Form
+    # Clear any previous login state when arriving at login page
+    if 'login_attempted' not in st.session_state:
+        st.session_state.logged_in = False
+        st.session_state.username = ""
+        st.session_state.role = ""
+
+    # ---------- Login Form ----------
     username = st.text_input("Username", key="login_username")
     password = st.text_input("Password", type="password", key="login_password")
     
     if st.button("Login"):
+        st.session_state.login_attempted = True
         if authenticate_user(username, password):
             st.session_state.logged_in = True
             st.session_state.username = username
             st.session_state.role = get_user_role(username)
             st.success("Login successful!")
-            time.sleep(1)
-            st.rerun()
+            time.sleep(1)  # Small delay for better UX
+            st.rerun()  # Refresh the page to update the menu
         else:
             st.error("Invalid username or password.")
 
-    # Forgot Password
+    # ---------- Forgot Password ----------
     st.markdown("### Forgot Password?")
     forgot_email = st.text_input("Enter registered email", key="forgot_email_input")
     
@@ -227,10 +234,12 @@ elif choice == "Login":
             st.session_state['reset_user'] = user[0]
             if send_email_otp(forgot_email, otp):
                 st.success("OTP sent to your email.")
+            else:
+                st.error("Failed to send OTP. Please try again.")
         else:
             st.error("Email not registered.")
 
-    # Reset Password
+    # ---------- Reset Password ----------
     if 'reset_otp' in st.session_state and 'reset_email' in st.session_state:
         st.markdown("### Reset Your Password")
         entered_otp = st.text_input("Enter OTP to reset password", key="reset_otp_input")
@@ -246,14 +255,18 @@ elif choice == "Login":
                     conn.commit()
                     conn.close()
                     
-                    st.success("Password reset successfully! You can now log in.")
-                    # Clear all relevant session state
+                    st.success("Password reset successfully! Please login with your new password.")
+                    
+                    # Clear all session state related to password reset and login
                     st.session_state.logged_in = False
                     st.session_state.username = ""
                     st.session_state.role = ""
+                    st.session_state.login_attempted = False
                     del st.session_state['reset_otp']
                     del st.session_state['reset_email']
                     del st.session_state['reset_user']
+                    
+                    # Force refresh to show clean login form
                     time.sleep(2)
                     st.rerun()
                 else:
