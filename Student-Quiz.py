@@ -52,7 +52,7 @@ if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'username' not in st.session_state:
     st.session_state.username = ""
-if 'role' not in st.session_state:  # Added role to session state
+if 'role' not in st.session_state:
     st.session_state.role = ""
 if 'camera_active' not in st.session_state:
     st.session_state.camera_active = False
@@ -75,15 +75,8 @@ def get_db_connection():
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         username TEXT UNIQUE,
                         password TEXT,
-                        role TEXT DEFAULT 'student')''')
-
-    # ✅ Add email column if it doesn't exist
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(users)")
-    columns = [column[1] for column in cursor.fetchall()]
-    if "email" not in columns:
-        conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
-        conn.commit()
+                        role TEXT DEFAULT 'student',
+                        email TEXT)''')
 
     # Create other tables
     conn.execute('''CREATE TABLE IF NOT EXISTS password_changes (
@@ -95,31 +88,6 @@ def get_db_connection():
 
     return conn
 
-
-def add_email_column_if_not_exists():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(users)")
-    columns = [col[1] for col in cursor.fetchall()]
-    if "email" not in columns:
-        cursor.execute("ALTER TABLE users ADD COLUMN email TEXT")
-        conn.commit()
-    conn.close()
-
-
-
-
-def add_email_column_if_not_exists():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(users)")
-    columns = [column[1] for column in cursor.fetchall()]
-    if "email" not in columns:
-        conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
-        conn.commit()
-    conn.close()
-
-
 # Password hashing
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -128,8 +96,8 @@ def hash_password(password):
 def register_user(username, password, role, email):
     conn = get_db_connection()
     try:
-        conn.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                     (username, hash_password(password), role))
+        conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
+                     (username, hash_password(password), role, email))
         conn.commit()
         st.success("Registration successful! Please login.")
     except sqlite3.IntegrityError:
@@ -137,14 +105,15 @@ def register_user(username, password, role, email):
     finally:
         conn.close()
 
-
 # Authenticate user
 def authenticate_user(username, password):
     conn = get_db_connection()
     cursor = conn.execute("SELECT password FROM users WHERE username = ?", (username,))
     user = cursor.fetchone()
     conn.close()
-    return user and user[0] == hash_password(password)
+    if user:
+        return user[0] == hash_password(password)
+    return False
 
 # Get user role
 def get_user_role(username):
@@ -210,44 +179,42 @@ if choice == "Register":
             otp = str(random.randint(100000, 999999))
             if send_email_otp(email, otp):
                 st.session_state['reg_otp'] = otp
-                st.session_state['reg_data'] = (username, hash_password(password), role, email)
+                st.session_state['reg_data'] = (username, password, role, email)
                 st.success("OTP sent to your email.")
     
     otp_entered = st.text_input("Enter OTP")
     if st.button("Verify and Register"):
         if otp_entered == st.session_state.get('reg_otp'):
-            username, password_hashed, role, email = st.session_state['reg_data']
-            conn = get_db_connection()
-            try:
-                conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
-                         (username, password_hashed, role, email))
-                conn.commit()
-                st.success("Registration successful! Please login.")
-            except sqlite3.IntegrityError:
-                st.error("Username or Email already exists!")
-            conn.close()
-
+            username, password, role, email = st.session_state['reg_data']
+            register_user(username, password, role, email)
+            # Clear registration data
+            del st.session_state['reg_otp']
+            del st.session_state['reg_data']
         else:
             st.error("Incorrect OTP!")
-
 
 elif choice == "Login":
     st.subheader("Login")
 
-    # ---------- Login Form ----------
+    # Login Form
     username = st.text_input("Username", key="login_username")
     password = st.text_input("Password", type="password", key="login_password")
+    
     if st.button("Login"):
         if authenticate_user(username, password):
             st.session_state.logged_in = True
             st.session_state.username = username
+            st.session_state.role = get_user_role(username)
             st.success("Login successful!")
+            time.sleep(1)
+            st.rerun()
         else:
             st.error("Invalid username or password.")
 
-    # ---------- Forgot Password ----------
+    # Forgot Password
     st.markdown("### Forgot Password?")
     forgot_email = st.text_input("Enter registered email", key="forgot_email_input")
+    
     if st.button("Send Reset OTP"):
         conn = get_db_connection()
         user = conn.execute("SELECT username FROM users WHERE email = ?", (forgot_email,)).fetchone()
@@ -263,7 +230,7 @@ elif choice == "Login":
         else:
             st.error("Email not registered.")
 
-    # ---------- Reset Password ----------
+    # Reset Password
     if 'reset_otp' in st.session_state and 'reset_email' in st.session_state:
         st.markdown("### Reset Your Password")
         entered_otp = st.text_input("Enter OTP to reset password", key="reset_otp_input")
@@ -275,21 +242,24 @@ elif choice == "Login":
                 if new_password == confirm_password:
                     conn = get_db_connection()
                     conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                                 (hash_password(new_password), st.session_state['reset_user']))
+                                (hash_password(new_password), st.session_state['reset_user']))
                     conn.commit()
                     conn.close()
+                    
                     st.success("Password reset successfully! You can now log in.")
-
-                    # Clear session
+                    # Clear all relevant session state
+                    st.session_state.logged_in = False
+                    st.session_state.username = ""
+                    st.session_state.role = ""
                     del st.session_state['reset_otp']
                     del st.session_state['reset_email']
                     del st.session_state['reset_user']
+                    time.sleep(2)
+                    st.rerun()
                 else:
-                    st.error("Passwords do not match. Please try again.")
+                    st.error("Passwords do not match!")
             else:
-                st.error("Incorrect OTP. Please try again.")
-
-
+                st.error("Incorrect OTP!")
 
 
 elif choice == "Take Quiz":
