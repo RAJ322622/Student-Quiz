@@ -196,15 +196,6 @@ if choice == "Register":
 elif choice == "Login":
     st.subheader("Login")
 
-    # Clear any previous login state when arriving at login page
-    if 'login_attempted' not in st.session_state:
-        st.session_state.logged_in = False
-        st.session_state.username = ""
-        st.session_state.role = ""
-
-    elif choice == "Login":
-    st.subheader("Login")
-
     # Clear any previous login state
     if st.session_state.get('login_attempted'):
         st.session_state.logged_in = False
