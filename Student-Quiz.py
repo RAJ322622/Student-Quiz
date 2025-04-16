@@ -261,8 +261,10 @@ elif choice == "Login":
             if entered_otp == st.session_state.get('reset_otp'):
                 if new_password == confirm_password:
                     conn = get_db_connection()
+                    # Hash the new password before storing it
+                    hashed_password = hash_password(new_password)
                     conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                                 (hash_password(new_password), st.session_state['reset_user']))
+                                (hashed_password, st.session_state['reset_user']))
                     conn.commit()
                     conn.close()
                     st.success("Password reset successfully! You can now log in.")
@@ -275,7 +277,6 @@ elif choice == "Login":
                     st.error("Passwords do not match. Please try again.")
             else:
                 st.error("Incorrect OTP. Please try again.")
-
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
     
