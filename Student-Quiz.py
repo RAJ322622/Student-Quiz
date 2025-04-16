@@ -32,12 +32,21 @@ def send_email_otp(to_email, otp):
         return False
 
 
-
+# Configuration
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
 ACTIVE_FILE = "active_students.json"
 RECORDING_DIR = "recordings"
 os.makedirs(RECORDING_DIR, exist_ok=True)
+
+# Email configuration
+EMAIL_SENDER = "rajkumar.k0322@gmail.com"
+EMAIL_PASSWORD = "kcxf lzrq xnts xlng"  # App Password
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
+
+# Secret key for professor panel
+PROFESSOR_SECRET_KEY = "RRCE@123"
 
 # Session state defaults
 for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_submitted", "usn", "section"]:
@@ -266,3 +275,202 @@ elif choice == "Login":
                     st.error("Passwords do not match. Please try again.")
             else:
                 st.error("Incorrect OTP. Please try again.")
+
+elif choice == "Professor Panel":
+    st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
+    
+    # First check for secret key
+    if 'prof_secret_verified' not in st.session_state:
+        secret_key = st.text_input("Enter Professor Secret Key to continue", type="password")
+        
+        if st.button("Verify Key"):
+            if secret_key == PROFESSOR_SECRET_KEY:
+                st.session_state.prof_secret_verified = True
+                st.rerun()
+            else:
+                st.error("Invalid secret key! Access denied.")
+    else:
+        # After secret key verification, show login/registration tabs
+        tab1, tab2 = st.tabs(["Professor Login", "Professor Registration"])
+        
+        with tab1:  # Login tab
+            if not st.session_state.get('prof_logged_in', False):
+                prof_id = st.text_input("Professor ID")
+                prof_pass = st.text_input("Professor Password", type="password")
+                
+                if st.button("Login as Professor"):
+                    conn = get_db_connection()
+                    cursor = conn.execute("SELECT password, role, email FROM users WHERE username = ? AND role = 'professor'", 
+                                        (prof_id,))
+                    prof_data = cursor.fetchone()
+                    conn.close()
+                    
+                    if prof_data and prof_data[0] == hash_password(prof_pass):
+                        st.session_state.prof_logged_in = True
+                        st.session_state.username = prof_id
+                        st.session_state.role = "professor"
+                        st.success(f"Welcome Professor {prof_id}!")
+                        os.makedirs(st.session_state.prof_dir, exist_ok=True)
+                        st.rerun()
+                    else:
+                        st.error("Invalid Professor credentials")
+            else:
+                # Show professor dashboard after successful login
+                st.success(f"Welcome Professor {st.session_state.username}!")
+                st.subheader("Student Results Management")
+                
+                # View results section
+                result_files = []
+                if os.path.exists(PROF_CSV_FILE):
+                    result_files.append(PROF_CSV_FILE)
+                
+                # Check for section-wise files
+                section_files = [f for f in os.listdir() if f.endswith("_results.csv")]
+                result_files.extend(section_files)
+                
+                if result_files:
+                    selected_file = st.selectbox("Select results file", result_files)
+                    try:
+                        df = pd.read_csv(selected_file)
+                        
+                        # Display statistics
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Total Students", len(df))
+                        with col2:
+                            avg_score = df['Score'].mean()
+                            st.metric("Average Score", f"{avg_score:.1f}/{len(QUESTIONS)}")
+                        with col3:
+                            pass_rate = (len(df[df['Score'] >= len(QUESTIONS)/2]) / len(df)) * 100
+                            st.metric("Pass Rate", f"{pass_rate:.1f}%")
+
+                        # Show full results
+                        st.markdown("### Detailed Results")
+                        sort_by = st.selectbox("Sort by", ["Score", "Time_Taken", "Timestamp", "Section"])
+                        ascending = st.checkbox("Ascending order", True)
+                        sorted_df = df.sort_values(by=sort_by, ascending=ascending)
+                        st.dataframe(sorted_df)
+                        
+                        # Download option
+                        st.download_button(
+                            label="Download Results",
+                            data=sorted_df.to_csv(index=False),
+                            file_name=f"sorted_{selected_file}",
+                            mime="text/csv"
+                        )
+                        
+                    except Exception as e:
+                        st.error(f"Error loading results: {e}")
+                else:
+                    st.warning("No results available yet.")
+                
+                # Logout button
+                if st.button("Logout"):
+                    st.session_state.prof_logged_in = False
+                    st.session_state.username = ""
+                    st.session_state.role = ""
+                    st.rerun()
+        
+        with tab2:  # Registration tab
+            st.subheader("Professor Registration")
+            st.warning("Professor accounts require verification.")
+            
+            # Registration form
+            full_name = st.text_input("Full Name")
+            designation = st.text_input("Designation")
+            department = st.selectbox("Department", ["CSE", "ISE", "ECE", "EEE", "MECH", "CIVIL"])
+            institutional_email = st.text_input("Institutional Email")
+            
+            if st.button("Request Account"):
+                if full_name and designation and department and institutional_email:
+                    # Generate credentials
+                    prof_id = f"PROF-{random.randint(10000, 99999)}"
+                    temp_password = str(random.randint(100000, 999999))
+                    
+                    # Register professor
+                    conn = get_db_connection()
+                    try:
+                        conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
+                                    (prof_id, hash_password(temp_password), "professor", institutional_email))
+                        conn.commit()
+                        
+                        # Create directory
+                        os.makedirs(f"professor_data/{prof_id}", exist_ok=True)
+                        
+                        # Send credentials
+                        try:
+                            msg = EmailMessage()
+                            msg.set_content(f"""Dear {full_name},
+
+Your professor account has been created:
+
+Username: {prof_id}
+Password: {temp_password}
+
+Please login and change your password immediately.
+
+Regards,
+Quiz App Team""")
+                            msg['Subject'] = "Professor Account Credentials"
+                            msg['From'] = EMAIL_SENDER
+                            msg['To'] = institutional_email
+
+                            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+                            server.starttls()
+                            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                            server.send_message(msg)
+                            server.quit()
+                            
+                            st.success("Account created! Credentials sent to your email.")
+                        except Exception as e:
+                            st.error(f"Account created but email failed: {e}")
+                    except sqlite3.IntegrityError:
+                        st.error("Professor with this email already exists!")
+                    finally:
+                        conn.close()
+                else:
+                    st.error("Please fill all fields!")
+
+elif choice == "Professor Monitoring Panel":
+    if not st.session_state.get('prof_verified', False):
+        secret_key = st.text_input("Enter Professor Secret Key to continue", type="password")
+        
+        if st.button("Verify Key"):
+            if secret_key == PROFESSOR_SECRET_KEY:
+                st.session_state.prof_verified = True
+                st.rerun()
+            else:
+                st.error("Invalid secret key! Access denied.")
+    else:
+        st_autorefresh(interval=10000, key="monitor_refresh")
+        st.header("\U0001F4E1 Live Monitoring Dashboard")
+        st.info("Monitoring students currently taking the quiz")
+        
+        live_students = get_live_students()
+        if not live_students:
+            st.write("No active students at the moment.")
+        else:
+            st.write(f"Active students ({len(live_students)}):")
+            for student in live_students:
+                st.write(f"- {student}")
+                
+            st.markdown("---")
+            st.markdown("### Recent Quiz Submissions")
+            if os.path.exists(PROF_CSV_FILE):
+                df = pd.read_csv(PROF_CSV_FILE)
+                recent_submissions = df.sort_values("Timestamp", ascending=False).head(5)
+                st.dataframe(recent_submissions)
+            else:
+                st.warning("No quiz submissions yet.")
+
+elif choice == "View Recorded Video":
+    st.subheader("Recorded Sessions")
+    video_files = [f for f in os.listdir(RECORDING_DIR) if f.endswith(".mp4")]
+    
+    if video_files:
+        selected_video = st.selectbox("Select recording", video_files)
+        video_path = os.path.join(RECORDING_DIR, selected_video)
+        st.video(video_path)
+    else:
+        st.warning("No recordings available.")
+
