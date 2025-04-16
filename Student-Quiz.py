@@ -30,43 +30,14 @@ def send_email_otp(to_email, otp):
     except Exception as e:
         st.error(f"Failed to send OTP: {e}")
         return False
-# Configuration
+
+
+
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
 ACTIVE_FILE = "active_students.json"
 RECORDING_DIR = "recordings"
 os.makedirs(RECORDING_DIR, exist_ok=True)
-
-# Email configuration
-EMAIL_SENDER = "rajkumar.k0322@gmail.com"
-EMAIL_PASSWORD = "kcxf lzrq xnts xlng"  # App Password
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-
-# Secret key for professor panel
-PROFESSOR_SECRET_KEY = "RRCE@123"
-
-# Initialize session state
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-if 'username' not in st.session_state:
-    st.session_state.username = ""
-if 'role' not in st.session_state:  # Added role to session state
-    st.session_state.role = ""
-if 'camera_active' not in st.session_state:
-    st.session_state.camera_active = False
-if 'prof_verified' not in st.session_state:
-    st.session_state.prof_verified = False
-if 'quiz_submitted' not in st.session_state:
-    st.session_state.quiz_submitted = False
-if 'usn' not in st.session_state:
-    st.session_state.usn = ""
-if 'section' not in st.session_state:
-    st.session_state.section = ""
-if 'prof_dir' not in st.session_state:
-    st.session_state.prof_dir = "professor_data"
-
-
 
 # Session state defaults
 for key in ["logged_in", "username", "camera_active", "prof_verified", "quiz_submitted", "usn", "section"]:
@@ -295,4 +266,3 @@ elif choice == "Login":
                     st.error("Passwords do not match. Please try again.")
             else:
                 st.error("Incorrect OTP. Please try again.")
-
