@@ -196,16 +196,18 @@ if choice == "Register":
 elif choice == "Login":
     st.subheader("Login")
 
+    # Initialize login form fields in session state if they don't exist
+    if 'login_username' not in st.session_state:
+        st.session_state.login_username = ""
+    if 'login_password' not in st.session_state:
+        st.session_state.login_password = ""
+
     # ---------- Login Form ----------
-    username = st.text_input("Username", key="login_username")
-    password = st.text_input("Password", type="password", key="login_password")
+    username = st.text_input("Username", value=st.session_state.login_username, key="login_username_widget")
+    password = st.text_input("Password", type="password", value=st.session_state.login_password, key="login_password_widget")
+    
     if st.button("Login"):
-        conn = get_db_connection()
-        cursor = conn.execute("SELECT password FROM users WHERE username = ?", (username,))
-        user = cursor.fetchone()
-        conn.close()
-        
-        if user and user[0] == hash_password(password):
+        if authenticate_user(username, password):
             st.session_state.logged_in = True
             st.session_state.username = username
             st.session_state.role = get_user_role(username)
@@ -216,6 +218,7 @@ elif choice == "Login":
     # ---------- Forgot Password ----------
     st.markdown("### Forgot Password?")
     forgot_email = st.text_input("Enter registered email", key="forgot_email_input")
+    
     if st.button("Send Reset OTP"):
         conn = get_db_connection()
         user = conn.execute("SELECT username FROM users WHERE email = ?", (forgot_email,)).fetchone()
@@ -245,18 +248,17 @@ elif choice == "Login":
                     try:
                         # Update password in users table
                         conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                                   (hash_password(new_password), st.session_state['reset_user']))
+                                  (hash_password(new_password), st.session_state['reset_user']))
                         
                         # Verify the password was updated
                         cursor = conn.execute("SELECT password FROM users WHERE username = ?",
-                                            (st.session_state['reset_user'],))
+                                             (st.session_state['reset_user'],))
                         updated_password = cursor.fetchone()[0]
                         
-                        # Check if new password matches what's in database
                         if updated_password == hash_password(new_password):
                             # Update password change count
                             cursor = conn.execute("SELECT change_count FROM password_changes WHERE username = ?",
-                                                 (st.session_state['reset_user'],))
+                                                (st.session_state['reset_user'],))
                             record = cursor.fetchone()
                             
                             if record:
@@ -267,17 +269,20 @@ elif choice == "Login":
                                            (st.session_state['reset_user'],))
                             
                             conn.commit()
-                            st.success("Password reset successfully! You can now log in with your new password.")
                             
-                            # Clear session state
-                            keys_to_delete = ['reset_otp', 'reset_email', 'reset_user']
-                            for key in keys_to_delete:
+                            # Store credentials for auto-fill (without modifying widget state directly)
+                            st.session_state.login_username = st.session_state['reset_user']
+                            st.session_state.login_password = new_password
+                            
+                            st.success("Password reset successfully! Your credentials have been filled below. Click Login to continue.")
+                            
+                            # Clear reset-related session state
+                            for key in ['reset_otp', 'reset_email', 'reset_user']:
                                 if key in st.session_state:
                                     del st.session_state[key]
                             
-                            # Auto-fill the login form with the username and new password
-                            st.session_state['login_username'] = st.session_state.get('reset_user', '')
-                            st.session_state['login_password'] = new_password
+                            # Rerun to update the UI with filled credentials
+                            st.rerun()
                         else:
                             st.error("Password update failed. Please try again.")
                     except Exception as e:
