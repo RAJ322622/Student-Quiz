@@ -239,7 +239,7 @@ elif choice == "Login":
                     conn = get_db_connection()
                     # Update password in users table
                     conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                                (hash_password(new_password), st.session_state['reset_user'])
+                                (hash_password(new_password), st.session_state['reset_user']))
                     conn.commit()
                     
                     # Update password change count
