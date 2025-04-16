@@ -62,15 +62,8 @@ def get_db_connection():
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         username TEXT UNIQUE,
                         password TEXT,
-                        role TEXT DEFAULT 'student')''')
-
-    # ✅ Add email column if it doesn't exist
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(users)")
-    columns = [column[1] for column in cursor.fetchall()]
-    if "email" not in columns:
-        conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
-        conn.commit()
+                        role TEXT DEFAULT 'student',
+                        email TEXT)''')
 
     # Create other tables
     conn.execute('''CREATE TABLE IF NOT EXISTS password_changes (
@@ -83,30 +76,6 @@ def get_db_connection():
     return conn
 
 
-def add_email_column_if_not_exists():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(users)")
-    columns = [col[1] for col in cursor.fetchall()]
-    if "email" not in columns:
-        cursor.execute("ALTER TABLE users ADD COLUMN email TEXT")
-        conn.commit()
-    conn.close()
-
-
-
-
-def add_email_column_if_not_exists():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(users)")
-    columns = [column[1] for column in cursor.fetchall()]
-    if "email" not in columns:
-        conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
-        conn.commit()
-    conn.close()
-
-
 # Password hashing
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -115,8 +84,8 @@ def hash_password(password):
 def register_user(username, password, role, email):
     conn = get_db_connection()
     try:
-        conn.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                     (username, hash_password(password), role))
+        conn.execute("INSERT INTO users (username, password, role, email) VALUES (?, ?, ?, ?)",
+                     (username, hash_password(password), role, email))
         conn.commit()
         st.success("Registration successful! Please login.")
     except sqlite3.IntegrityError:
@@ -210,13 +179,14 @@ if choice == "Register":
                          (username, password_hashed, role, email))
                 conn.commit()
                 st.success("Registration successful! Please login.")
+                # Clear registration session state
+                del st.session_state['reg_otp']
+                del st.session_state['reg_data']
             except sqlite3.IntegrityError:
                 st.error("Username or Email already exists!")
             conn.close()
-
         else:
             st.error("Incorrect OTP!")
-
 
 elif choice == "Login":
     st.subheader("Login")
@@ -224,17 +194,20 @@ elif choice == "Login":
     # ---------- Login Form ----------
     username = st.text_input("Username", key="login_username")
     password = st.text_input("Password", type="password", key="login_password")
+    
     if st.button("Login"):
         if authenticate_user(username, password):
             st.session_state.logged_in = True
             st.session_state.username = username
             st.success("Login successful!")
+            st.rerun()  # Force refresh to update the UI
         else:
             st.error("Invalid username or password.")
 
     # ---------- Forgot Password ----------
     st.markdown("### Forgot Password?")
     forgot_email = st.text_input("Enter registered email", key="forgot_email_input")
+    
     if st.button("Send Reset OTP"):
         conn = get_db_connection()
         user = conn.execute("SELECT username FROM users WHERE email = ?", (forgot_email,)).fetchone()
@@ -267,16 +240,18 @@ elif choice == "Login":
                                 (hashed_password, st.session_state['reset_user']))
                     conn.commit()
                     conn.close()
-                    st.success("Password reset successfully! You can now log in.")
-
-                    # Clear session
+                    st.success("Password reset successfully! You can now log in with your new password.")
+                    
+                    # Clear session state
                     del st.session_state['reset_otp']
                     del st.session_state['reset_email']
                     del st.session_state['reset_user']
+                    st.rerun()  # Force refresh to update the UI
                 else:
                     st.error("Passwords do not match. Please try again.")
             else:
                 st.error("Incorrect OTP. Please try again.")
+
 elif choice == "Professor Panel":
     st.subheader("\U0001F9D1‍\U0001F3EB Professor Access Panel")
     
@@ -311,6 +286,7 @@ elif choice == "Professor Panel":
                         st.session_state.username = prof_id
                         st.session_state.role = "professor"
                         st.success(f"Welcome Professor {prof_id}!")
+                        st.session_state.prof_dir = f"professor_data/{prof_id}"
                         os.makedirs(st.session_state.prof_dir, exist_ok=True)
                         st.rerun()
                     else:
@@ -474,4 +450,3 @@ elif choice == "View Recorded Video":
         st.video(video_path)
     else:
         st.warning("No recordings available.")
-
