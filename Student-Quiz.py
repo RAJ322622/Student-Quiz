@@ -196,31 +196,27 @@ if choice == "Register":
 elif choice == "Login":
     st.subheader("Login")
 
-    # Clear any previous login state
-    if st.session_state.get('login_attempted'):
-        st.session_state.logged_in = False
-        st.session_state.username = ""
-        st.session_state.role = ""
+    # Debug: Show current session state
+    st.write("Current session state:", st.session_state)
 
     # ---------- Login Form ----------
     username = st.text_input("Username", key="login_username")
     password = st.text_input("Password", type="password", key="login_password")
     
     if st.button("Login"):
-        st.session_state.login_attempted = True
         conn = get_db_connection()
         try:
-            # First verify the user exists
+            # Get both username and password from database
             user = conn.execute("SELECT username, password FROM users WHERE username = ?", (username,)).fetchone()
+            
             if user:
-                stored_hash = user[1]
-                input_hash = hash_password(password)
+                db_username, db_password = user
+                # Debug output
+                st.write(f"Database password hash: {db_password}")
+                st.write(f"Computed hash of input: {hash_password(password)}")
                 
-                # Debug output (remove in production)
-                st.write(f"Stored hash: {stored_hash}")
-                st.write(f"Input hash: {input_hash}")
-                
-                if stored_hash == input_hash:
+                # Verify password
+                if db_password == hash_password(password):
                     st.session_state.logged_in = True
                     st.session_state.username = username
                     st.session_state.role = get_user_role(username)
@@ -228,7 +224,7 @@ elif choice == "Login":
                     time.sleep(1)
                     st.rerun()
                 else:
-                    st.error("Invalid password")
+                    st.error("Invalid password - Hashes don't match")
             else:
                 st.error("Username not found")
         except Exception as e:
@@ -243,7 +239,7 @@ elif choice == "Login":
     if st.button("Send Reset OTP"):
         conn = get_db_connection()
         try:
-            user = conn.execute("SELECT username, email FROM users WHERE email = ?", (forgot_email,)).fetchone()
+            user = conn.execute("SELECT username FROM users WHERE email = ?", (forgot_email,)).fetchone()
             if user:
                 otp = str(random.randint(100000, 999999))
                 st.session_state['reset_email'] = forgot_email
@@ -254,7 +250,7 @@ elif choice == "Login":
                 else:
                     st.error("Failed to send OTP")
             else:
-                st.error("Email not found in our system")
+                st.error("Email not found")
         except Exception as e:
             st.error(f"Error: {str(e)}")
         finally:
@@ -272,32 +268,38 @@ elif choice == "Login":
                 if new_password == confirm_password:
                     conn = get_db_connection()
                     try:
-                        # Update password in database
+                        # Get current hash for comparison
+                        current_user = conn.execute("SELECT password FROM users WHERE username = ?", 
+                                                   (st.session_state['reset_user'],)).fetchone()
+                        st.write(f"Current password hash: {current_user[0]}")
+                        
+                        # Update password
                         new_hash = hash_password(new_password)
                         conn.execute("UPDATE users SET password = ? WHERE username = ?",
                                    (new_hash, st.session_state['reset_user']))
                         conn.commit()
                         
-                        # Debug output
+                        # Verify update
                         updated_user = conn.execute("SELECT password FROM users WHERE username = ?", 
-                                                  (st.session_state['reset_user'],)).fetchone()
-                        st.write(f"Updated hash in DB: {updated_user[0]}")
+                                                 (st.session_state['reset_user'],)).fetchone()
+                        st.write(f"Updated password hash: {updated_user[0]}")
                         
-                        st.success("Password reset successfully! Please login with your new password.")
-                        
-                        # Clear all states
-                        st.session_state.logged_in = False
-                        st.session_state.username = ""
-                        st.session_state.role = ""
-                        if 'login_attempted' in st.session_state:
-                            del st.session_state['login_attempted']
-                        del st.session_state['reset_otp']
-                        del st.session_state['reset_email'] 
-                        del st.session_state['reset_user']
-                        
-                        # Force refresh
-                        time.sleep(2)
-                        st.rerun()
+                        if updated_user[0] == new_hash:
+                            st.success("Password reset successfully! Please login with your new password.")
+                            
+                            # Clear all states
+                            st.session_state.logged_in = False
+                            st.session_state.username = ""
+                            st.session_state.role = ""
+                            del st.session_state['reset_otp']
+                            del st.session_state['reset_email']
+                            del st.session_state['reset_user']
+                            
+                            # Force refresh
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error("Password update failed - hashes don't match")
                     except Exception as e:
                         st.error(f"Reset failed: {str(e)}")
                     finally:
@@ -306,7 +308,6 @@ elif choice == "Login":
                     st.error("Passwords don't match!")
             else:
                 st.error("Invalid OTP!")
-
 
 elif choice == "Take Quiz":
     if not st.session_state.logged_in:
