@@ -200,13 +200,14 @@ elif choice == "Login":
     # ---------- Login Form ----------
     username = st.text_input("Username", key="login_username")
     password = st.text_input("Password", type="password", key="login_password")
-    if st.button("Login"):
-        if authenticate_user(username, password):
-            st.session_state.logged_in = True
-            st.session_state.username = username
-            st.success("Login successful!")
-        else:
-            st.error("Invalid username or password.")
+    if new_password == confirm_password:
+        if st.button("Login"):
+            if authenticate_user(username, password):
+                st.session_state.logged_in = True
+                st.session_state.username = username
+                st.success("Login successful!")
+            else:
+                st.error("Invalid username or password.")
 
     # ---------- Forgot Password ----------
     st.markdown("### Forgot Password?")
