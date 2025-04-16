@@ -200,7 +200,12 @@ elif choice == "Login":
     username = st.text_input("Username", key="login_username")
     password = st.text_input("Password", type="password", key="login_password")
     if st.button("Login"):
-        if authenticate_user(username, password):
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT password FROM users WHERE username = ?", (username,))
+        user = cursor.fetchone()
+        conn.close()
+        
+        if user and user[0] == hash_password(password):
             st.session_state.logged_in = True
             st.session_state.username = username
             st.session_state.role = get_user_role(username)
@@ -240,33 +245,43 @@ elif choice == "Login":
                     try:
                         # Update password in users table
                         conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                                    (hash_password(new_password), st.session_state['reset_user']))
+                                   (hash_password(new_password), st.session_state['reset_user']))
                         
-                        # Update password change count
-                        cursor = conn.execute("SELECT change_count FROM password_changes WHERE username = ?",
+                        # Verify the password was updated
+                        cursor = conn.execute("SELECT password FROM users WHERE username = ?",
                                             (st.session_state['reset_user'],))
-                        record = cursor.fetchone()
+                        updated_password = cursor.fetchone()[0]
                         
-                        if record:
-                            conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?",
-                                        (st.session_state['reset_user'],))
-                        else:
-                            conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)",
-                                        (st.session_state['reset_user'],))
-                        
-                        conn.commit()
-                        st.success("Password reset successfully! You can now log in with your new password.")
-                        
-                        # Clear session state
-                        if 'reset_otp' in st.session_state:
-                            del st.session_state['reset_otp']
-                        if 'reset_email' in st.session_state:
-                            del st.session_state['reset_email']
-                        if 'reset_user' in st.session_state:
-                            del st.session_state['reset_user']
+                        # Check if new password matches what's in database
+                        if updated_password == hash_password(new_password):
+                            # Update password change count
+                            cursor = conn.execute("SELECT change_count FROM password_changes WHERE username = ?",
+                                                 (st.session_state['reset_user'],))
+                            record = cursor.fetchone()
                             
+                            if record:
+                                conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?",
+                                           (st.session_state['reset_user'],))
+                            else:
+                                conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)",
+                                           (st.session_state['reset_user'],))
+                            
+                            conn.commit()
+                            st.success("Password reset successfully! You can now log in with your new password.")
+                            
+                            # Clear session state
+                            keys_to_delete = ['reset_otp', 'reset_email', 'reset_user']
+                            for key in keys_to_delete:
+                                if key in st.session_state:
+                                    del st.session_state[key]
+                            
+                            # Auto-fill the login form with the username and new password
+                            st.session_state['login_username'] = st.session_state.get('reset_user', '')
+                            st.session_state['login_password'] = new_password
+                        else:
+                            st.error("Password update failed. Please try again.")
                     except Exception as e:
-                        st.error(f"Error updating password: {e}")
+                        st.error(f"Error updating password: {str(e)}")
                     finally:
                         conn.close()
                 else:
