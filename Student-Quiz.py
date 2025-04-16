@@ -13,6 +13,24 @@ import smtplib
 from email.message import EmailMessage
 import random
 
+def send_email_otp(to_email, otp):
+    try:
+        msg = EmailMessage()
+        msg.set_content(f"Your OTP for Secure Quiz App is: {otp}")
+        msg['Subject'] = "Email Verification OTP - Secure Quiz App"
+        msg['From'] = "rajkumar.k0322@gmail.com"
+        msg['To'] = to_email
+
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login("rajkumar.k0322@gmail.com", "kcxf lzrq xnts xlng")  # App Password
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        st.error(f"Failed to send OTP: {e}")
+        return False
+
 # Configuration
 PROF_CSV_FILE = "prof_quiz_results.csv"
 STUDENT_CSV_FILE = "student_quiz_results.csv"
