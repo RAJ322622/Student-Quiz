@@ -203,6 +203,7 @@ elif choice == "Login":
         if authenticate_user(username, password):
             st.session_state.logged_in = True
             st.session_state.username = username
+            st.session_state.role = get_user_role(username)
             st.success("Login successful!")
         else:
             st.error("Invalid username or password.")
@@ -236,12 +237,28 @@ elif choice == "Login":
             if entered_otp == st.session_state.get('reset_otp'):
                 if new_password == confirm_password:
                     conn = get_db_connection()
+                    # Update password in users table
                     conn.execute("UPDATE users SET password = ? WHERE username = ?",
-                                 (hash_password(new_password), st.session_state['reset_user']))
+                                (hash_password(new_password), st.session_state['reset_user'])
+                    conn.commit()
+                    
+                    # Update password change count
+                    cursor = conn.execute("SELECT change_count FROM password_changes WHERE username = ?",
+                                        (st.session_state['reset_user'],))
+                    record = cursor.fetchone()
+                    
+                    if record:
+                        conn.execute("UPDATE password_changes SET change_count = change_count + 1 WHERE username = ?",
+                                    (st.session_state['reset_user'],))
+                    else:
+                        conn.execute("INSERT INTO password_changes (username, change_count) VALUES (?, 1)",
+                                    (st.session_state['reset_user'],))
+                    
                     conn.commit()
                     conn.close()
-                    st.success("Password reset successfully! You can now log in.")
-
+                    
+                    st.success("Password reset successfully! You can now log in with your new password.")
+                    
                     # Clear session
                     del st.session_state['reset_otp']
                     del st.session_state['reset_email']
@@ -250,7 +267,6 @@ elif choice == "Login":
                     st.error("Passwords do not match. Please try again.")
             else:
                 st.error("Incorrect OTP. Please try again.")
-
 
 elif choice == "Take Quiz":
     if not st.session_state.logged_in:
