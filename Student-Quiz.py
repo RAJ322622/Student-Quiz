@@ -18,12 +18,12 @@ def send_email_otp(to_email, otp):
         msg = EmailMessage()
         msg.set_content(f"Your OTP for Secure Quiz App is: {otp}")
         msg['Subject'] = "Email Verification OTP - Secure Quiz App"
-        msg['From'] = "rajkumar.k0322@gmail.com"
+        msg['From'] = ""
         msg['To'] = to_email
 
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
-        server.login("rajkumar.k0322@gmail.com", "kcxf lzrq xnts xlng")  # App Password
+        server.login("", "")  # App Password
         server.send_message(msg)
         server.quit()
         return True
@@ -39,8 +39,8 @@ RECORDING_DIR = "recordings"
 os.makedirs(RECORDING_DIR, exist_ok=True)
 
 # Email configuration
-EMAIL_SENDER = "rajkumar.k0322@gmail.com"
-EMAIL_PASSWORD = "kcxf lzrq xnts xlng"  # App Password
+EMAIL_SENDER = ""
+EMAIL_PASSWORD = ""  # App Password
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
